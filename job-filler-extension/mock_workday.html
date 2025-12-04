@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Workday Application (Updated)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input,
+        select {
+            padding: 8px;
+            width: 300px;
+        }
+
+        .error {
+            color: red;
+            font-size: 12px;
+            display: none;
+        }
+
+        .date-input-container {
+            position: relative;
+            width: 300px;
+        }
+
+        .date-input-container input {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .calendar-icon {
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            cursor: pointer;
+        }
+
+        .section {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Job Application</h1>
+
+    <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="fullName">
+    </div>
+
+    <div class="form-group">
+        <label>How did you hear about us? *</label>
+        <select id="source-select">
+            <option value="">Select One</option>
+            <option value="LinkedIn">LinkedIn</option>
+            <option value="Indeed">Indeed</option>
+            <option value="Referral">Referral</option>
+        </select>
+    </div>
+
+    <div class="section">
+        <h2>Education 1</h2>
+        <div class="form-group">
+            <label>School or University *</label>
+            <input type="text" name="education[0].school">
+        </div>
+
+        <div class="form-group">
+            <label>Degree *</label>
+            <select id="degree-select-0">
+                <option value="">Select One</option>
+                <option value="HS">HS</option>
+                <option value="B.S.">B.S.</option>
+                <option value="M.S.">M.S.</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Education 2</h2>
+        <div class="form-group">
+            <label>School or University *</label>
+            <input type="text" name="education[1].school">
+        </div>
+
+        <div class="form-group">
+            <label>Degree *</label>
+            <select id="degree-select-1">
+                <option value="">Select One</option>
+                <option value="HS">HS</option>
+                <option value="B.S.">B.S.</option>
+                <option value="M.S.">M.S.</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Work Experience 1</h2>
+        <div class="form-group">
+            <label>Job Title *</label>
+            <input type="text" name="experience[0].title">
+        </div>
+
+        <div class="form-group">
+            <label>Company *</label>
+            <input type="text" name="experience[0].company">
+        </div>
+
+        <div class="form-group">
+            <label>From *</label>
+            <div class="date-input-container">
+                <input type="text" placeholder="MM/YYYY" aria-label="From Date" id="from-date-0">
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

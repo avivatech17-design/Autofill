@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autofill Mock Test</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .section { margin-bottom: 30px; border: 1px solid #ccc; padding: 15px; }
+        .hidden { display: none; }
+        label { display: block; margin-top: 10px; }
+        input { margin-bottom: 10px; width: 100%; padding: 5px; }
+        button { padding: 8px 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Autofill Logic Test</h1>
+
+    <!-- 1. Work Experience: Inputs Hidden, Add Button Visible -->
+    <div class="section" id="work-section">
+        <h2>Work Experience</h2>
+        <div id="work-inputs" class="hidden">
+            <label>Job Title</label>
+            <input type="text" name="job_title">
+            <label>Company</label>
+            <input type="text" name="company">
+        </div>
+        <button id="add-work-btn" onclick="document.getElementById('work-inputs').classList.remove('hidden'); this.style.display='none';">Add Work Experience</button>
+    </div>
+
+    <!-- 2. Education: Inputs Visible (Should NOT click Add) -->
+    <div class="section" id="edu-section">
+        <h2>Education</h2>
+        <div id="edu-inputs">
+            <label>School</label>
+            <input type="text" name="school">
+        </div>
+        <button id="add-edu-btn" onclick="alert('Error: Add Education clicked when inputs were visible!')">Add Education</button>
+    </div>
+
+    <!-- 3. Skills: Tag Input style -->
+    <div class="section">
+        <h2>Skills</h2>
+        <label>Skills (Type and Enter)</label>
+        <input type="text" name="skills" id="skills-input" placeholder="Add a skill...">
+        <div id="skills-list"></div>
+    </div>
+
+    <!-- 4. Submit Button (Should NOT be clicked) -->
+    <div class="section">
+        <button id="submit-btn" onclick="alert('Error: Submit button auto-clicked!')">Submit Application</button>
+    </div>
+
+    <script>
+        // Simple script to show added skills
+        const skillsInput = document.getElementById('skills-input');
+        const skillsList = document.getElementById('skills-list');
+        skillsInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const span = document.createElement('span');
+                span.style.background = '#eee';
+                span.style.padding = '2px 5px';
+                span.style.marginRight = '5px';
+                span.innerText = skillsInput.value;
+                skillsList.appendChild(span);
+                skillsInput.value = '';
+            }
+        });
+    </script>
+</body>
+</html>

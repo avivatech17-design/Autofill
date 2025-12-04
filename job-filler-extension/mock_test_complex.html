@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autofill Mock Test - Complex</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            border: 1px solid #ccc;
+            padding: 15px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input {
+            margin-bottom: 10px;
+            width: 100%;
+            padding: 5px;
+        }
+
+        button {
+            padding: 8px 15px;
+            cursor: pointer;
+        }
+
+        /* Skills Dropdown Styles */
+        .skills-container {
+            position: relative;
+        }
+
+        .skills-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            border: 1px solid #ccc;
+            background: #fff;
+            z-index: 10;
+            display: none;
+        }
+
+        .skills-dropdown.show {
+            display: block;
+        }
+
+        .skill-option {
+            padding: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+        }
+
+        .skill-option:hover {
+            background: #f0f0f0;
+        }
+
+        .skill-option input {
+            width: auto;
+            margin-right: 10px;
+            margin-bottom: 0;
+        }
+
+        .selected-skills {
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .skill-tag {
+            background: #e0e0e0;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Autofill Logic Test - Complex</h1>
+
+    <!-- 1. Work Experience: Inputs Hidden, Add Button Visible -->
+    <div class="section" id="work-section">
+        <h2>Work Experience</h2>
+        <div id="work-inputs" class="hidden">
+            <label>Job Title</label>
+            <input type="text" name="job_title">
+            <label>Company</label>
+            <input type="text" name="company">
+        </div>
+        <!-- Button is sibling to inputs container, similar to screenshot -->
+        <button id="add-work-btn"
+            onclick="document.getElementById('work-inputs').classList.remove('hidden'); this.style.display='none';">Add</button>
+    </div>
+
+    <!-- 2. Education: Inputs Visible (Should NOT click Add) -->
+    <div class="section" id="edu-section">
+        <h2>Education</h2>
+        <div id="edu-inputs">
+            <label>School</label>
+            <input type="text" name="school">
+        </div>
+        <button id="add-edu-btn" onclick="alert('Error: Add Education clicked when inputs were visible!')">Add</button>
+    </div>
+
+    <!-- 3. Skills: Search with Dropdown and Checkboxes -->
+    <div class="section">
+        <h2>Skills</h2>
+        <label>Skills (Type to Search)</label>
+        <div class="skills-container">
+            <input type="text" name="skills" id="skills-input" placeholder="Type to add skills..." autocomplete="off">
+            <div class="skills-dropdown" id="skills-dropdown">
+                <!-- Options will be populated by JS -->
+            </div>
+        </div>
+        <div class="selected-skills" id="selected-skills"></div>
+    </div>
+
+    <script>
+        // Mock Skills Logic
+        const skillsInput = document.getElementById('skills-input');
+        const skillsDropdown = document.getElementById('skills-dropdown');
+        const selectedSkills = document.getElementById('selected-skills');
+        const allSkills = ['Java', 'JavaScript', 'Python', 'React', 'Node.js', 'SQL', 'HTML', 'CSS'];
+
+        skillsInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            if (!val) {
+                skillsDropdown.classList.remove('show');
+                return;
+            }
+
+            const matches = allSkills.filter(s => s.toLowerCase().includes(val));
+            skillsDropdown.innerHTML = '';
+
+            if (matches.length > 0) {
+                matches.forEach(skill => {
+                    const div = document.createElement('div');
+                    div.className = 'skill-option';
+                    div.innerHTML = `<input type="checkbox"> ${skill}`;
+                    div.onclick = (evt) => {
+                        // Prevent bubbling if clicking checkbox directly
+                        if (evt.target.type !== 'checkbox') {
+                            const cb = div.querySelector('input');
+                            cb.checked = !cb.checked;
+                        }
+                        addSkill(skill);
+                    };
+                    skillsDropdown.appendChild(div);
+                });
+                skillsDropdown.classList.add('show');
+            } else {
+                skillsDropdown.classList.remove('show');
+            }
+        });
+
+        function addSkill(skill) {
+            const tag = document.createElement('span');
+            tag.className = 'skill-tag';
+            tag.innerText = skill;
+            selectedSkills.appendChild(tag);
+            skillsInput.value = ''; // Clear input
+            skillsDropdown.classList.remove('show');
+        }
+    </script>
+</body>
+
+</html>

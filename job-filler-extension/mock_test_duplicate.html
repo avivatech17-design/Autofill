@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Test - Duplicate Resume & Add Buttons</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .visible {
+            display: block;
+        }
+
+        .uploaded-file {
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-top: 10px;
+            background: #f9f9f9;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Job Application Mock - Duplicate Check</h1>
+
+    <!-- Work Experience: Initially Hidden -->
+    <div role="group" aria-labelledby="Work-Experience-section" class="section">
+        <h3 id="Work-Experience-section">Work Experience</h3>
+        <div id="work-container">
+            <button data-automation-id="add-button" onclick="showWork()">Add</button>
+        </div>
+        <div id="work-form" class="hidden">
+            <label>Job Title <input type="text" name="title"></label><br>
+            <label>Company <input type="text" name="company"></label>
+        </div>
+    </div>
+
+    <!-- Education: Initially Hidden -->
+    <div role="group" aria-labelledby="Education-section" class="section">
+        <h3 id="Education-section">Education</h3>
+        <div id="edu-container">
+            <button data-automation-id="add-button" onclick="showEdu()">Add</button>
+        </div>
+        <div id="edu-form" class="hidden">
+            <label>School <input type="text" name="school"></label><br>
+            <label>Degree <input type="text" name="degree"></label>
+        </div>
+    </div>
+
+    <!-- Resume: Already Uploaded -->
+    <div role="group" aria-labelledby="Resume-section" class="section">
+        <h3 id="Resume-section">Resume/CV</h3>
+        <label>Upload a file</label>
+        <input type="file" data-automation-id="file-upload-input-ref">
+
+        <!-- Simulate existing file -->
+        <div data-automation-id="file-upload-item" class="uploaded-file">
+            <div>Ankeesh_Full-Stack.pdf</div>
+            <div data-automation-id="file-upload-successful">Successfully Uploaded!</div>
+            <button data-automation-id="delete-file">Delete</button>
+        </div>
+    </div>
+
+    <script>
+        function showWork() {
+            document.getElementById('work-form').classList.remove('hidden');
+            document.getElementById('work-form').classList.add('visible');
+            console.log("Work form shown");
+        }
+        function showEdu() {
+            document.getElementById('edu-form').classList.remove('hidden');
+            document.getElementById('edu-form').classList.add('visible');
+            console.log("Education form shown");
+        }
+    </script>
+</body>
+
+</html>
