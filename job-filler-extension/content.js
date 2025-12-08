@@ -977,17 +977,17 @@
           el.querySelector("button[data-automation-id='delete-file']")
         );
 
-        if (hasExisting) return; // Skip if already uploaded
+        if (hasExisting) continue; // Skip if already uploaded
 
         if (profile.resume) {
           const file = dataUrlToFile(profile.resume);
           if (file) setFileInput(input, file);
         }
-        return;
+        continue;
       }
 
-      if (existing && !looksLikePlaceholder && !isPasswordField && !isDateField) return;
-      if (input.type === "hidden") return;
+      if (existing && !looksLikePlaceholder && !isPasswordField && !isDateField) continue;
+      if (input.type === "hidden") continue;
 
       // Full name
       if (
@@ -995,7 +995,7 @@
         profile.fullName
       ) {
         setValue(input, profile.fullName);
-        return;
+        continue;
       }
 
       // First name
@@ -1004,7 +1004,7 @@
         profile.firstName
       ) {
         setValue(input, profile.firstName);
-        return;
+        continue;
       }
 
       // Last name
@@ -1013,7 +1013,7 @@
         profile.lastName
       ) {
         setValue(input, profile.lastName);
-        return;
+        continue;
       }
 
       // Email
@@ -1023,13 +1023,13 @@
         input.type !== "password"
       ) {
         setValue(input, profile.email);
-        return;
+        continue;
       }
 
       // Phone
       if (fieldMatches(input, ["phone", "mobile", "contact"]) && profile.phone) {
         setValue(input, profile.phone);
-        return;
+        continue;
       }
 
       // City / Location
@@ -1038,7 +1038,7 @@
         profile.city
       ) {
         setValue(input, profile.city);
-        return;
+        continue;
       }
 
       // State
@@ -1047,7 +1047,7 @@
         profile.state
       ) {
         setValue(input, profile.state);
-        return;
+        continue;
       }
 
       // Zip / Postal
@@ -1056,7 +1056,7 @@
         profile.zip
       ) {
         setValue(input, profile.zip);
-        return;
+        continue;
       }
 
       // Country
@@ -1071,7 +1071,7 @@
         profile.address
       ) {
         setValue(input, profile.address);
-        return;
+        continue;
       }
 
       // LinkedIn
@@ -1080,13 +1080,13 @@
         profile.linkedin
       ) {
         setValue(input, profile.linkedin);
-        return;
+        continue;
       }
 
       // GitHub
       if (fieldMatches(input, ["github", "git hub"]) && profile.github) {
         setValue(input, profile.github);
-        return;
+        continue;
       }
 
       // Portfolio / Website
@@ -1095,13 +1095,13 @@
         profile.portfolio
       ) {
         setValue(input, profile.portfolio);
-        return;
+        continue;
       }
 
       // Current Title
       if (fieldMatches(input, ["title", "role"]) && profile.title) {
         setValue(input, profile.title);
-        return;
+        continue;
       }
 
       // Current Company
@@ -1110,7 +1110,7 @@
         profile.company
       ) {
         setValue(input, profile.company);
-        return;
+        continue;
       }
 
       // Role Description / Summary
@@ -1119,7 +1119,7 @@
         (profile.title || profile.company)
       ) {
         setValue(input, `${profile.title || ""} ${profile.company ? `at ${profile.company}` : ""}`.trim());
-        return;
+        continue;
       }
 
       // From / Start date (MM/YYYY)
@@ -1127,7 +1127,7 @@
         fieldMatches(input, ["from", "start date", "start", "mm/yyyy"]) &&
         setTextDateIfNeeded(input, defaultAnswers.fromDate)
       ) {
-        return;
+        continue;
       }
 
       // To / End date (MM/YYYY)
@@ -1135,22 +1135,22 @@
         fieldMatches(input, ["to", "end date", "end", "mm/yyyy"]) &&
         setTextDateIfNeeded(input, defaultAnswers.toDate)
       ) {
-        return;
+        continue;
       }
 
       // Degree / Major on custom dropdowns
       if (fieldMatches(input, ["degree"])) {
-        if (tryCustomDropdown(["degree"], degreeVariants(defaultAnswers.degree), true)) return;
+        if (tryCustomDropdown(["degree"], degreeVariants(defaultAnswers.degree), true)) continue;
       }
       if (fieldMatches(input, ["field of study", "major", "program"])) {
-        if (tryCustomDropdown(["field of study", "major", "program"], [defaultAnswers.major], true)) return;
+        if (tryCustomDropdown(["field of study", "major", "program"], [defaultAnswers.major], true)) continue;
       }
 
       // Source / Hear About (Text Input equivalent)
       if (fieldMatches(input, ["how did you hear", "source"])) {
         if (profile.question_hear_about) {
           setValue(input, profile.question_hear_about);
-          return;
+          continue;
         }
       }
 
@@ -1160,7 +1160,7 @@
         profile.question_office_location
       ) {
         setValue(input, profile.question_office_location);
-        return;
+        continue;
       }
 
       // Conflict of Interest Details
@@ -1170,7 +1170,7 @@
         profile.question_conflict_details
       ) {
         setValue(input, profile.question_conflict_details);
-        return;
+        continue;
       }
 
       // Government Official Details
@@ -1180,7 +1180,7 @@
         profile.question_gov_details
       ) {
         setValue(input, profile.question_gov_details);
-        return;
+        continue;
       }
 
       // Password
@@ -1192,7 +1192,7 @@
         // Show password as text so user can see it
         input.type = "text";
         setValue(input, defaultAnswers.password);
-        return;
+        continue;
       }
     }
   }
