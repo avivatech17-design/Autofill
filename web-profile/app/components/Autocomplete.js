@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-export default function Autocomplete({ options, value, onChange, placeholder, disabled }) {
+export default function Autocomplete({ options, value, onChange, placeholder, disabled, debugKey }) {
     const [isOpen, setIsOpen] = useState(false);
     const [inputValue, setInputValue] = useState(value || '');
     const [filteredOptions, setFilteredOptions] = useState([]);
@@ -9,6 +9,11 @@ export default function Autocomplete({ options, value, onChange, placeholder, di
     useEffect(() => {
         setInputValue(value || '');
     }, [value]);
+
+    useEffect(() => {
+        console.log(`Autocomplete MOUNTED key=${debugKey}`);
+        return () => console.log(`Autocomplete UNMOUNTED key=${debugKey}`);
+    }, [debugKey]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -22,7 +27,15 @@ export default function Autocomplete({ options, value, onChange, placeholder, di
 
     const handleInputChange = (e) => {
         const val = e.target.value;
+        console.log('Autocomplete input:', val);
+        console.log('Type of onChange:', typeof onChange);
+        console.log('onChange source:', onChange.toString());
         setInputValue(val);
+        try {
+            onChange(val); // Propagate change immediately
+        } catch (e) {
+            console.error('Error calling onChange:', e);
+        }
         setIsOpen(true);
 
         if (!val) {
@@ -50,7 +63,11 @@ export default function Autocomplete({ options, value, onChange, placeholder, di
             <input
                 value={inputValue}
                 onChange={handleInputChange}
-                onFocus={() => setIsOpen(true)}
+                onFocus={() => {
+                    console.log('Autocomplete FOCUSED');
+                    setIsOpen(true);
+                }}
+                onBlur={() => console.log('Autocomplete BLURRED')}
                 placeholder={placeholder}
                 disabled={disabled}
                 style={{ width: '100%' }}
@@ -72,9 +89,9 @@ export default function Autocomplete({ options, value, onChange, placeholder, di
                     margin: 0,
                     boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                 }}>
-                    {filteredOptions.map((option) => (
+                    {filteredOptions.map((option, idx) => (
                         <li
-                            key={option}
+                            key={`${option}-${idx}`}
                             onClick={() => handleSelect(option)}
                             style={{
                                 padding: '8px 12px',

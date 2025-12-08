@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Mock Job Application (Robinhood Style)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 40px;
+            font-family: sans-serif;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container" style="max-width: 800px;">
+        <h1>Job Application</h1>
+
+        <!-- General -->
+        <div class="form-group">
+            <label>First Name*</label>
+            <input type="text" class="form-control" id="first_name">
+        </div>
+        <div class="form-group">
+            <label>Last Name*</label>
+            <input type="text" class="form-control" id="last_name">
+        </div>
+        <div class="form-group">
+            <label>Email*</label>
+            <input type="text" class="form-control" id="email">
+        </div>
+        <div class="form-group">
+            <label>Phone</label>
+            <input type="text" class="form-control" id="phone">
+        </div>
+
+        <div class="form-group">
+            <label>How did you hear about this job?</label>
+            <select class="form-select" id="hear_about">
+                <option value="">Select...</option>
+                <option value="LinkedIn">LinkedIn</option>
+                <option value="Indeed">Indeed</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Have you used Robinhood?</label>
+            <select class="form-select" id="used_product">
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select>
+        </div>
+
+        <!-- Location -->
+        <div class="form-group">
+            <label>Are you willing to work from the office(s) listed?*</label>
+            <select class="form-select" id="office_willing">
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>What is your preferred office location?*</label>
+            <input type="text" class="form-control" id="office_loc" placeholder="City, State">
+        </div>
+
+        <!-- Compliance -->
+        <div class="form-group">
+            <label>Do you have any Personal/Familial Relationships or Conflict of Interest?*</label>
+            <select class="form-select" id="conflict">
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Do you currently hold a position as a government official?*</label>
+            <select class="form-select" id="gov">
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select>
+        </div>
+
+        <!-- EEO -->
+        <h3>Equal Employment Opportunity</h3>
+
+        <div class="form-group">
+            <label>What is your gender identity?*</label>
+            <select class="form-select" id="gender">
+                <option value="">Select...</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Decline">Decline</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>What is your race or ethnicity?*</label>
+            <select class="form-select" id="race">
+                <option value="">Select...</option>
+                <option value="Asian">Asian</option>
+                <option value="White">White</option>
+                <option value="Decline">Decline</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>What is your military status?*</label>
+            <select class="form-select" id="veteran">
+                <option value="">Select...</option>
+                <option value="Veteran">Veteran</option>
+                <option value="Not a Veteran">Not a Veteran</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Do you identify as part of the LGBTQ+ community?</label>
+            <select class="form-select" id="lgbtq">
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>What is your favorite color? (Generic Test)</label>
+            <select class="form-select" id="color">
+                <option value="">Select...</option>
+                <option value="Red">Red</option>
+                <option value="Blue">Blue</option>
+                <option value="Green">Green</option>
+            </select>
+        </div>
+
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="agree_privacy">
+            <label class="form-check-label" for="agree_privacy">
+                I agree that Qualtrics may send me communications related to jobs...
+            </label>
+        </div>
+
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sms_confirm">
+            <label class="form-check-label" for="sms_confirm">
+                Yes, I would like to receive communications from Qualtrics via SMS.
+            </label>
+        </div>
+
+    </div>
+
+    <script>
+        // Simulate Lazy Loading/Custom Dropdown behavior
+        document.addEventListener('DOMContentLoaded', () => {
+            const selects = document.querySelectorAll('select');
+            selects.forEach(s => {
+                // Store original options
+                const originalOptions = s.innerHTML;
+                // Clear options initially
+                s.innerHTML = '<option value="">Select...</option>';
+
+                // Restore on click/focus with delay
+                const loadOptions = () => {
+                    if (s.children.length <= 1) {
+                        console.log('Loading options for', s.id);
+                        setTimeout(() => {
+                            s.innerHTML = originalOptions;
+                        }, 500); // 500ms delay vs 600ms wait in script
+                    }
+                };
+
+                s.addEventListener('mousedown', loadOptions);
+                s.addEventListener('focus', loadOptions);
+            });
+        });
+    </script>
+</body>
+
+</html>

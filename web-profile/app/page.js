@@ -5,6 +5,7 @@ import { getSupabaseClient, resumeBucket, tables } from '@/lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Country, State, City } from 'country-state-city';
 import Autocomplete from './components/Autocomplete';
+import JobPreferencesForm from './components/JobPreferencesForm';
 import { companies, jobTitles, universities, degrees, majors, skills, languages, races, veteranStatuses, disabilityStatuses, roles, roleSkills } from '@/lib/data';
 
 const months = [
@@ -52,7 +53,8 @@ const emptyProfile = {
   primary_role: '',
 };
 
-const emptyExperience = {
+const createEmptyExperience = () => ({
+  localId: Math.random().toString(36).substr(2, 9),
   company_name: '',
   job_title: '',
   location: '',
@@ -62,7 +64,7 @@ const emptyExperience = {
   end_year: '',
   is_current: false,
   description: '',
-};
+});
 
 const emptyEducation = {
   school_name: '',
@@ -75,6 +77,11 @@ const emptyEducation = {
 };
 
 export default function Page() {
+  useEffect(() => {
+    console.log('PAGE MOUNTED');
+    return () => console.log('PAGE UNMOUNTED');
+  }, []);
+  console.log('Page Render');
   const supabase = useMemo(() => getSupabaseClient(), []);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -83,7 +90,19 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
 
   const [profile, setProfile] = useState(emptyProfile);
-  const [experiences, setExperiences] = useState([{ ...emptyExperience }]);
+  const [experiences, _setExperiences] = useState([createEmptyExperience()]);
+  const isApplyingLoad = useRef(false);
+  const isUserEdit = useRef(false);
+
+  const setExperiences = (val) => {
+    console.log('DEBUG: setExperiences called with:', JSON.stringify(val));
+    // console.log('DEBUG: setExperiences trace', new Error().stack);
+    if (!isApplyingLoad.current) {
+      isUserEdit.current = true;
+    }
+    _setExperiences(val);
+  };
+  console.log('DEBUG: Page render experiences:', JSON.stringify(experiences));
   const [educations, setEducations] = useState([{ ...emptyEducation }]);
   const [userSkills, setUserSkills] = useState([]);
   const userSkillsRef = useRef([]);
@@ -107,7 +126,8 @@ export default function Page() {
         loadAll(data.session);
       }
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log('DEBUG: Auth event:', event, newSession?.user?.id);
       setSession(newSession);
       if (newSession?.user) {
         setEmail(newSession.user.email || '');
@@ -133,16 +153,24 @@ export default function Page() {
 
   const resetAll = () => {
     setProfile(emptyProfile);
-    setExperiences([{ ...emptyExperience }]);
+    setExperiences([createEmptyExperience()]);
     setEducations([{ ...emptyEducation }]);
     setUserSkills([]);
     setUserLanguages([]);
+    isLoaded.current = false;
+    isUserEdit.current = false;
   };
 
   const isFetching = useRef(false);
+  const isLoaded = useRef(false);
 
   const loadAll = async (activeSession) => {
-    if (isFetching.current) return;
+    if (isFetching.current || isLoaded.current) return;
+    if (isUserEdit.current) {
+      console.log('DEBUG: loadAll skipped because of user edit');
+      return;
+    }
+    console.log('DEBUG: loadAll called', activeSession?.user?.id);
     isFetching.current = true;
 
     if (!supabase || !activeSession?.access_token) {
@@ -160,11 +188,45 @@ export default function Page() {
         return;
       }
       const p = json.profile || {};
-      setProfile({ ...emptyProfile, ...p });
-      setExperiences(json.experiences?.length ? json.experiences : [{ ...emptyExperience }]);
-      setEducations(json.educations?.length ? json.educations : [{ ...emptyEducation }]);
+      console.log('DEBUG: loadAll profile:', JSON.stringify(p));
+
+      if (isUserEdit.current) {
+        console.log('DEBUG: loadAll skipped applying because of user edit');
+        return;
+      }
+
+      // Fetch experiences directly to bypass API issues
+      const { data: expData } = await supabase
+        .from(tables.experiences)
+        .select('*')
+        .eq('user_id', activeSession.user.id)
+        .order('end_year', { ascending: false });
+
+      const { data: eduData } = await supabase
+        .from(tables.educations)
+        .select('*')
+        .eq('user_id', activeSession.user.id);
+
+      const { data: profileData } = await supabase
+        .from(tables.profile)
+        .select('*')
+        .eq('id', activeSession.user.id)
+        .single();
+
+      isApplyingLoad.current = true;
+      setProfile({ ...emptyProfile, ...profileData });
+
+      const loadedExperiences = expData?.length
+        ? expData.map(e => ({ ...e, localId: Math.random().toString(36).substr(2, 9) }))
+        : [createEmptyExperience()];
+
+      setExperiences(loadedExperiences);
+      setEducations(eduData?.length ? eduData : [{ ...emptyEducation }]);
       setUserSkills(json.skills || []);
       setUserLanguages(json.languages || []);
+      isApplyingLoad.current = false;
+
+      isLoaded.current = true;
     } catch (e) {
       setAuthStatus(`Error: ${e.message || e.toString()}`);
     } finally {
@@ -214,8 +276,7 @@ export default function Page() {
     setLoading(true);
     const uid = session.user.id;
     try {
-      const { error } = await supabase
-        .from(tables.profile)
+
       const payload = {
         id: uid,
         updated_at: new Date().toISOString(),
@@ -236,7 +297,7 @@ export default function Page() {
         disability_status: profile.disability_status || null,
         primary_role: profile.primary_role || null
       };
-      console.log('DEBUG: Upsert payload:', payload);
+      console.log('DEBUG: Upsert payload:', JSON.stringify(payload));
 
       const { error: profileError } = await supabase
         .from(tables.profile)
@@ -270,21 +331,20 @@ export default function Page() {
       return isNaN(parsed) ? null : parsed;
     };
 
-    // Filter out empty entries
-    const expClean = experiences
-      .filter(e => e.company_name && e.company_name.trim() !== '')
-      .map(e => ({
-        user_id: uid,
-        company_name: e.company_name,
-        job_title: e.job_title,
-        location: e.location,
-        start_month: e.start_month,
-        start_year: toInt(e.start_year),
-        end_month: e.is_current ? null : e.end_month,
-        end_year: e.is_current ? null : toInt(e.end_year),
-        is_current: e.is_current,
-        description: e.description
-      }));
+    // Filter out empty entries and keep track of localIds
+    const validExperiences = experiences.filter(e => e.company_name && e.company_name.trim() !== '');
+    const expClean = validExperiences.map(e => ({
+      user_id: uid,
+      company_name: e.company_name,
+      job_title: e.job_title,
+      location: e.location,
+      start_month: e.start_month,
+      start_year: toInt(e.start_year),
+      end_month: e.is_current ? null : e.end_month,
+      end_year: e.is_current ? null : toInt(e.end_year),
+      is_current: e.is_current,
+      description: e.description
+    }));
 
     const eduClean = educations
       .filter(e => e.school_name && e.school_name.trim() !== '')
@@ -301,7 +361,7 @@ export default function Page() {
       }));
 
     const skillsClean = userSkills.map(s => ({ user_id: uid, skill_name: s.skill_name || s }));
-    const langsClean = userLanguages.map(l => ({ user_id: uid, language_name: l.language_name || l, proficiency: 'Native' })); // Default proficiency for now
+    const langsClean = userLanguages.map(l => ({ user_id: uid, language_name: l.language_name || l, proficiency: 'Native' }));
 
     try {
       // Delete existing
@@ -311,14 +371,38 @@ export default function Page() {
       await supabase.from(tables.languages).delete().eq('user_id', uid);
 
       // Insert new
-      if (expClean.length > 0) await supabase.from(tables.experiences).insert(expClean);
+      if (expClean.length > 0) {
+        const { data: insertedExp, error } = await supabase.from(tables.experiences).insert(expClean).select();
+        if (error) throw error;
+
+        console.log('DEBUG: validExperiences:', JSON.stringify(validExperiences));
+        console.log('DEBUG: insertedExp:', JSON.stringify(insertedExp));
+
+        // Merge inserted IDs with preserved localIds
+        // Assuming order is preserved
+        const mergedExperiences = insertedExp.map((dbExp, i) => {
+          const localId = validExperiences[i] ? validExperiences[i].localId : 'MISSING';
+          console.log(`DEBUG: Merging dbID=${dbExp.id} with localId=${localId}`);
+          return {
+            ...dbExp,
+            localId: localId
+          };
+        });
+
+        console.log('DEBUG: mergedExperiences:', JSON.stringify(mergedExperiences));
+
+        // Update state directly to avoid re-fetching and key regeneration
+        setExperiences(mergedExperiences.length ? mergedExperiences : [createEmptyExperience()]);
+      } else {
+        setExperiences([createEmptyExperience()]);
+      }
+
       if (eduClean.length > 0) await supabase.from(tables.educations).insert(eduClean);
       if (skillsClean.length > 0) await supabase.from(tables.skills).insert(skillsClean);
       if (langsClean.length > 0) await supabase.from(tables.languages).insert(langsClean);
 
       setAuthStatus('Saved work, education, skills & languages');
-      // Reload to get generated IDs
-      await loadAll(session);
+      // Do NOT call loadAll(session) here to prevent overwriting localIds
     } catch (e) {
       console.error(e);
       setAuthStatus(`Save error: ${e.message}`);
@@ -431,451 +515,471 @@ export default function Page() {
         >
           Work
         </button>
+        <button
+          className={`tab-btn ${activeTab === 'preferences' ? 'active' : ''}`}
+          onClick={() => switchTab('preferences')}
+        >
+          Preferences
+        </button>
       </div>
 
-      {activeTab === 'profile' && (
-        <div className="animate-fade-in">
-          <div className="card">
-            <div className="flex-between" style={{ marginBottom: '16px' }}>
-              <div className="section-title" style={{ margin: 0 }}>Personal Information</div>
-              <button className="btn-primary" onClick={savePersonal} disabled={loading}>
-                {loading ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
 
-            <div className="row">
-              <div>
-                <label>Full Name</label>
-                <input value={profile.full_name} onChange={e => setProfile({ ...profile, full_name: e.target.value })} />
-              </div>
-              <div>
-                <label>Phone</label>
-                <input value={profile.phone} onChange={e => setProfile({ ...profile, phone: e.target.value })} />
-              </div>
-            </div>
+      {
+        activeTab === 'preferences' && (
+          <div className="animate-fade-in">
+            <JobPreferencesForm session={session} />
+          </div>
+        )
+      }
 
-            <div className="row">
-              <div>
-                <label>Country</label>
-                <select
-                  value={profile.country}
-                  onChange={(e) => {
-                    setProfile({ ...profile, country: e.target.value, state: '', city: '' });
-                  }}
-                >
-                  <option value="">Select Country</option>
-                  {Country.getAllCountries()
-                    .filter(c => c.isoCode === 'US')
-                    .map((country) => (
-                      <option key={country.isoCode} value={country.isoCode}>
-                        {country.name}
+      {
+        activeTab === 'profile' && (
+          <div className="animate-fade-in">
+            <div className="card">
+              <div className="flex-between" style={{ marginBottom: '16px' }}>
+                <div className="section-title" style={{ margin: 0 }}>Personal Information</div>
+                <button className="btn-primary" onClick={savePersonal} disabled={loading}>
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+
+              <div className="row">
+                <div>
+                  <label>Full Name</label>
+                  <input value={profile.full_name || ''} onChange={e => setProfile({ ...profile, full_name: e.target.value })} placeholder="e.g. John Doe" />
+                </div>
+                <div>
+                  <label>Phone</label>
+                  <input value={profile.phone || ''} onChange={e => setProfile({ ...profile, phone: e.target.value })} placeholder="e.g. +1 555 0123" />
+                </div>
+              </div>
+
+              <div className="row">
+                <div>
+                  <label>Country</label>
+                  <select
+                    value={profile.country}
+                    onChange={(e) => {
+                      setProfile({ ...profile, country: e.target.value, state: '', city: '' });
+                    }}
+                  >
+                    <option value="">Select Country</option>
+                    {Country.getAllCountries()
+                      .filter(c => c.isoCode === 'US')
+                      .map((country) => (
+                        <option key={country.isoCode} value={country.isoCode}>
+                          {country.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label>State</label>
+                  <select
+                    value={profile.state || ''}
+                    onChange={(e) => {
+                      setProfile({ ...profile, state: e.target.value, city: '' });
+                    }}
+                    disabled={!profile.country}
+                  >
+                    <option value="">Select State</option>
+                    {State.getStatesOfCountry(profile.country).map((state) => (
+                      <option key={state.isoCode} value={state.isoCode}>
+                        {state.name}
                       </option>
                     ))}
-                </select>
+                  </select>
+                </div>
+                <div>
+                  <label>City</label>
+                  <select
+                    value={profile.city || ''}
+                    onChange={(e) => setProfile({ ...profile, city: e.target.value })}
+                    disabled={!profile.state}
+                  >
+                    <option value="">Select City</option>
+                    {City.getCitiesOfState(profile.country, profile.state).map((city) => (
+                      <option key={city.name} value={city.name}>
+                        {city.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label>State</label>
+            </div>
+
+            <div className="card">
+              <div className="section-title">Links</div>
+              <div className="row">
+                <div>
+                  <label>LinkedIn URL</label>
+                  <input value={profile.linkedin_url} onChange={e => setProfile({ ...profile, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/..." />
+                </div>
+                <div>
+                  <label>GitHub URL</label>
+                  <input value={profile.github_url} onChange={e => setProfile({ ...profile, github_url: e.target.value })} placeholder="https://github.com/..." />
+                </div>
+                <div>
+                  <label>Portfolio URL</label>
+                  <input value={profile.portfolio_url} onChange={e => setProfile({ ...profile, portfolio_url: e.target.value })} placeholder="https://..." />
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="section-title">Demographics</div>
+              <div className="row">
+                <div>
+                  <label>Race / Ethnicity</label>
+                  <select
+                    value={profile.race || ''}
+                    onChange={e => setProfile({ ...profile, race: e.target.value })}
+                  >
+                    <option value="">Select Race</option>
+                    {races.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Veteran Status</label>
+                  <select
+                    value={profile.veteran_status || ''}
+                    onChange={e => setProfile({ ...profile, veteran_status: e.target.value })}
+                  >
+                    <option value="">Select Status</option>
+                    {veteranStatuses.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="row">
+                <div style={{ flex: 1 }}>
+                  <label>Disability Status</label>
+                  <select
+                    value={profile.disability_status || ''}
+                    onChange={e => setProfile({ ...profile, disability_status: e.target.value })}
+                  >
+                    <option value="">Select Status</option>
+                    {disabilityStatuses.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="section-title">Primary Role & Skills</div>
+              <div style={{ marginBottom: '16px' }}>
+                <label>Primary Role (auto-adds top ~100 skills)</label>
                 <select
-                  value={profile.state || ''}
-                  onChange={(e) => {
-                    setProfile({ ...profile, state: e.target.value, city: '' });
+                  value={profile.primary_role || ''}
+                  onChange={e => {
+                    const role = e.target.value;
+                    const updatedProfile = { ...profile, primary_role: role };
+                    setProfile(updatedProfile);
+
+                    if (role && roleSkills[role]) {
+                      // Auto-add skills for the selected role
+                      const newSkills = [...userSkills];
+                      roleSkills[role].forEach(skill => {
+                        if (!newSkills.some(s => (s.skill_name || s) === skill)) {
+                          newSkills.push(skill);
+                        }
+                      });
+                      setUserSkills(newSkills);
+                      // Trigger save immediately with new skills? Or just let user click save.
+                      // User flow: Select role -> Skills appear -> User clicks Save.
+                      // If user clicks Save, savePersonal() is called.
+                      // We need to ensure savePersonal() sees the new skills.
+                    }
                   }}
-                  disabled={!profile.country}
                 >
-                  <option value="">Select State</option>
-                  {State.getStatesOfCountry(profile.country).map((state) => (
-                    <option key={state.isoCode} value={state.isoCode}>
-                      {state.name}
-                    </option>
-                  ))}
+                  <option value="">Select Role</option>
+                  {roles.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
-              <div>
-                <label>City</label>
-                <select
-                  value={profile.city || ''}
-                  onChange={(e) => setProfile({ ...profile, city: e.target.value })}
-                  disabled={!profile.state}
-                >
-                  <option value="">Select City</option>
-                  {City.getCitiesOfState(profile.country, profile.state).map((city) => (
-                    <option key={city.name} value={city.name}>
-                      {city.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
 
-          <div className="card">
-            <div className="section-title">Links</div>
-            <div className="row">
-              <div>
-                <label>LinkedIn URL</label>
-                <input value={profile.linkedin_url} onChange={e => setProfile({ ...profile, linkedin_url: e.target.value })} placeholder="https://linkedin.com/in/..." />
+              <div className="section-title" style={{ fontSize: '16px', marginTop: '12px' }}>My Skills ({userSkills.length})</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                {userSkills.map((s, i) => (
+                  <div key={i} style={{
+                    background: '#e0f2fe', color: '#0284c7', padding: '4px 12px', borderRadius: '16px',
+                    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px'
+                  }}>
+                    {s.skill_name || s}
+                    <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => {
+                      setUserSkills(userSkills.filter((_, idx) => idx !== i));
+                    }}>×</span>
+                  </div>
+                ))}
               </div>
-              <div>
-                <label>GitHub URL</label>
-                <input value={profile.github_url} onChange={e => setProfile({ ...profile, github_url: e.target.value })} placeholder="https://github.com/..." />
-              </div>
-              <div>
-                <label>Portfolio URL</label>
-                <input value={profile.portfolio_url} onChange={e => setProfile({ ...profile, portfolio_url: e.target.value })} placeholder="https://..." />
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="section-title">Demographics</div>
-            <div className="row">
-              <div>
-                <label>Race / Ethnicity</label>
-                <select
-                  value={profile.race || ''}
-                  onChange={e => setProfile({ ...profile, race: e.target.value })}
-                >
-                  <option value="">Select Race</option>
-                  {races.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>Veteran Status</label>
-                <select
-                  value={profile.veteran_status || ''}
-                  onChange={e => setProfile({ ...profile, veteran_status: e.target.value })}
-                >
-                  <option value="">Select Status</option>
-                  {veteranStatuses.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="row">
-              <div style={{ flex: 1 }}>
-                <label>Disability Status</label>
-                <select
-                  value={profile.disability_status || ''}
-                  onChange={e => setProfile({ ...profile, disability_status: e.target.value })}
-                >
-                  <option value="">Select Status</option>
-                  {disabilityStatuses.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="section-title">Primary Role & Skills</div>
-            <div style={{ marginBottom: '16px' }}>
-              <label>Primary Role (auto-adds top ~100 skills)</label>
-              <select
-                value={profile.primary_role || ''}
-                onChange={e => {
-                  const role = e.target.value;
-                  const updatedProfile = { ...profile, primary_role: role };
-                  setProfile(updatedProfile);
-
-                  if (role && roleSkills[role]) {
-                    // Auto-add skills for the selected role
-                    const newSkills = [...userSkills];
-                    roleSkills[role].forEach(skill => {
-                      if (!newSkills.some(s => (s.skill_name || s) === skill)) {
-                        newSkills.push(skill);
-                      }
-                    });
-                    setUserSkills(newSkills);
-                    // Trigger save immediately with new skills? Or just let user click save.
-                    // User flow: Select role -> Skills appear -> User clicks Save.
-                    // If user clicks Save, savePersonal() is called.
-                    // We need to ensure savePersonal() sees the new skills.
+              <Autocomplete
+                value=""
+                options={skills}
+                placeholder="Add a skill manually (e.g. React)"
+                onChange={(val) => {
+                  if (!userSkills.some(s => (s.skill_name || s) === val)) {
+                    setUserSkills([...userSkills, val]);
                   }
                 }}
-              >
-                <option value="">Select Role</option>
-                {roles.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              />
             </div>
 
-            <div className="section-title" style={{ fontSize: '16px', marginTop: '12px' }}>My Skills ({userSkills.length})</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-              {userSkills.map((s, i) => (
-                <div key={i} style={{
-                  background: '#e0f2fe', color: '#0284c7', padding: '4px 12px', borderRadius: '16px',
-                  display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px'
-                }}>
-                  {s.skill_name || s}
-                  <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => {
-                    setUserSkills(userSkills.filter((_, idx) => idx !== i));
-                  }}>×</span>
-                </div>
-              ))}
-            </div>
-            <Autocomplete
-              value=""
-              options={skills}
-              placeholder="Add a skill manually (e.g. React)"
-              onChange={(val) => {
-                if (!userSkills.some(s => (s.skill_name || s) === val)) {
-                  setUserSkills([...userSkills, val]);
-                }
-              }}
-            />
-          </div>
-
-          <div className="card">
-            <div className="section-title">Languages</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-              {userLanguages.map((l, i) => (
-                <div key={i} style={{
-                  background: '#f0fdf4', color: '#16a34a', padding: '4px 12px', borderRadius: '16px',
-                  display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px'
-                }}>
-                  {l.language_name || l}
-                  <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => {
-                    setUserLanguages(userLanguages.filter((_, idx) => idx !== i));
-                  }}>×</span>
-                </div>
-              ))}
-            </div>
-            <Autocomplete
-              value=""
-              options={languages}
-              placeholder="Add a language (e.g. English)"
-              onChange={(val) => {
-                if (!userLanguages.some(l => (l.language_name || l) === val)) {
-                  setUserLanguages([...userLanguages, val]);
-                }
-              }}
-            />
-          </div>
-
-          <div className="card">
-            <div className="section-title">Resume</div>
-            {profile.resume_path && (
-              <div style={{ marginBottom: '12px', fontSize: '14px' }}>
-                Current Resume: <a href="#" style={{ color: 'var(--primary-color)' }}>{profile.resume_path.split('/').pop()}</a>
-              </div>
-            )}
-            <input type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload} />
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'work' && (
-        <div className="animate-fade-in">
-          <div className="card">
-            <div className="flex-between" style={{ marginBottom: '16px' }}>
-              <div className="section-title" style={{ margin: 0 }}>Experience</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn-secondary" onClick={() => setExperiences([...experiences, { ...emptyExperience }])}>+ Add</button>
-                <button className="btn-primary" onClick={saveWork} disabled={loading}>Save</button>
-              </div>
-            </div>
-
-            {experiences.map((exp, idx) => (
-              <div key={exp.id || idx} className="work-item">
-                <div className="flex-between" style={{ marginBottom: '12px' }}>
-                  <div className="work-role">Position {idx + 1}</div>
-                  {experiences.length > 1 && (
-                    <button className="btn-danger" onClick={() => setExperiences(experiences.filter((_, i) => i !== idx))}>Remove</button>
-                  )}
-                </div>
-
-                <div className="row">
-                  <div>
-                    <label style={{ marginTop: 0 }}>Company</label>
-                    <Autocomplete
-                      value={exp.company_name || ''}
-                      options={companies}
-                      placeholder="e.g. Google"
-                      onChange={(val) => {
-                        const newExp = [...experiences];
-                        newExp[idx].company_name = val;
-                        setExperiences(newExp);
-                      }}
-                    />
+            <div className="card">
+              <div className="section-title">Languages</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                {userLanguages.map((l, i) => (
+                  <div key={i} style={{
+                    background: '#f0fdf4', color: '#16a34a', padding: '4px 12px', borderRadius: '16px',
+                    display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px'
+                  }}>
+                    {l.language_name || l}
+                    <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => {
+                      setUserLanguages(userLanguages.filter((_, idx) => idx !== i));
+                    }}>×</span>
                   </div>
-                  <div>
-                    <label style={{ marginTop: 0 }}>Title</label>
-                    <Autocomplete
-                      value={exp.job_title || ''}
-                      options={jobTitles}
-                      placeholder="e.g. Software Engineer"
-                      onChange={(val) => {
-                        const newExp = [...experiences];
-                        newExp[idx].job_title = val;
-                        setExperiences(newExp);
-                      }}
-                    />
-                  </div>
-                </div>
+                ))}
+              </div>
+              <Autocomplete
+                value=""
+                options={languages}
+                placeholder="Add a language (e.g. English)"
+                onChange={(val) => {
+                  if (!userLanguages.some(l => (l.language_name || l) === val)) {
+                    setUserLanguages([...userLanguages, val]);
+                  }
+                }}
+              />
+            </div>
 
-                <div className="row">
-                  <MonthYearSelect
-                    labelPrefix="Start"
-                    month={exp.start_month}
-                    year={exp.start_year}
-                    onChangeMonth={(val) => {
+            <div className="card">
+              <div className="section-title">Resume</div>
+              {profile.resume_path && (
+                <div style={{ marginBottom: '12px', fontSize: '14px' }}>
+                  Current Resume: <a href="#" style={{ color: 'var(--primary-color)' }}>{profile.resume_path.split('/').pop()}</a>
+                </div>
+              )}
+              <input type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload} />
+            </div>
+          </div>
+        )
+      }
+
+      {/* {activeTab === 'work' && ( */}
+      <div className="animate-fade-in" style={{ display: activeTab === 'work' ? 'block' : 'none' }}>
+        <div className="card">
+          <div className="flex-between" style={{ marginBottom: '16px' }}>
+            <div className="section-title" style={{ margin: 0 }}>Experience</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="btn-secondary" onClick={() => setExperiences([...experiences, createEmptyExperience()])}>+ Add</button>
+              <button className="btn-primary" onClick={saveWork} disabled={loading}>Save</button>
+            </div>
+          </div>
+
+          {experiences.map((exp, idx) => (
+            <div key={exp.localId} className="work-item">
+              <div className="flex-between" style={{ marginBottom: '12px' }}>
+                <div className="work-role">Position {idx + 1}</div>
+                {experiences.length > 1 && (
+                  <button className="btn-danger" onClick={() => setExperiences(experiences.filter((_, i) => i !== idx))}>Remove</button>
+                )}
+              </div>
+
+              <div className="row">
+                <div>
+                  <label style={{ marginTop: 0 }}>Company</label>
+                  <Autocomplete
+                    debugKey={exp.localId}
+                    value={exp.company_name || ''}
+                    options={companies}
+                    placeholder="e.g. Google"
+                    onChange={(val) => {
                       const newExp = [...experiences];
-                      newExp[idx].start_month = val;
-                      setExperiences(newExp);
-                    }}
-                    onChangeYear={(val) => {
-                      const newExp = [...experiences];
-                      newExp[idx].start_year = val;
+                      newExp[idx] = { ...newExp[idx], company_name: val };
                       setExperiences(newExp);
                     }}
                   />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                      <input
-                        type="checkbox"
-                        checked={exp.is_current}
-                        onChange={e => {
-                          const newExp = [...experiences];
-                          newExp[idx].is_current = e.target.checked;
-                          if (e.target.checked) {
-                            newExp[idx].end_month = '';
-                            newExp[idx].end_year = '';
-                          }
-                          setExperiences(newExp);
-                        }}
-                        style={{ width: 'auto', marginRight: '8px' }}
-                      />
-                      <label style={{ margin: 0 }}>I currently work here</label>
-                    </div>
-                    {!exp.is_current && (
-                      <MonthYearSelect
-                        labelPrefix="End"
-                        month={exp.end_month}
-                        year={exp.end_year}
-                        onChangeMonth={(val) => {
-                          const newExp = [...experiences];
-                          newExp[idx].end_month = val;
-                          setExperiences(newExp);
-                        }}
-                        onChangeYear={(val) => {
-                          const newExp = [...experiences];
-                          newExp[idx].end_year = val;
-                          setExperiences(newExp);
-                        }}
-                      />
-                    )}
-                  </div>
+                </div>
+                <div>
+                  <label style={{ marginTop: 0 }}>Title</label>
+                  <Autocomplete
+                    value={exp.job_title || ''}
+                    options={jobTitles}
+                    placeholder="e.g. Software Engineer"
+                    onChange={(val) => {
+                      const newExp = [...experiences];
+                      newExp[idx] = { ...newExp[idx], job_title: val };
+                      setExperiences(newExp);
+                    }}
+                  />
                 </div>
               </div>
-            ))}
-          </div>
 
-          <div className="card">
-            <div className="flex-between" style={{ marginBottom: '16px' }}>
-              <div className="section-title" style={{ margin: 0 }}>Education</div>
-              <button className="btn-secondary" onClick={() => setEducations([...educations, { ...emptyEducation }])}>+ Add</button>
-            </div>
-
-            {educations.map((edu, idx) => (
-              <div key={edu.id || idx} className="work-item">
-                <div className="flex-between" style={{ marginBottom: '12px' }}>
-                  <div className="work-role">School {idx + 1}</div>
-                  {educations.length > 1 && (
-                    <button className="btn-danger" onClick={() => setEducations(educations.filter((_, i) => i !== idx))}>Remove</button>
+              <div className="row">
+                <MonthYearSelect
+                  labelPrefix="Start"
+                  month={exp.start_month}
+                  year={exp.start_year}
+                  onChangeMonth={(val) => {
+                    const newExp = [...experiences];
+                    newExp[idx] = { ...newExp[idx], start_month: val };
+                    setExperiences(newExp);
+                  }}
+                  onChangeYear={(val) => {
+                    const newExp = [...experiences];
+                    newExp[idx] = { ...newExp[idx], start_year: val };
+                    setExperiences(newExp);
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={exp.is_current}
+                      onChange={e => {
+                        const newExp = [...experiences];
+                        newExp[idx] = { ...newExp[idx], is_current: e.target.checked };
+                        if (e.target.checked) {
+                          newExp[idx].end_month = '';
+                          newExp[idx].end_year = '';
+                        }
+                        setExperiences(newExp);
+                      }}
+                      style={{ width: 'auto', marginRight: '8px' }}
+                    />
+                    <label style={{ margin: 0 }}>I currently work here</label>
+                  </div>
+                  {!exp.is_current && (
+                    <MonthYearSelect
+                      labelPrefix="End"
+                      month={exp.end_month}
+                      year={exp.end_year}
+                      onChangeMonth={(val) => {
+                        const newExp = [...experiences];
+                        newExp[idx] = { ...newExp[idx], end_month: val };
+                        setExperiences(newExp);
+                      }}
+                      onChangeYear={(val) => {
+                        const newExp = [...experiences];
+                        newExp[idx] = { ...newExp[idx], end_year: val };
+                        setExperiences(newExp);
+                      }}
+                    />
                   )}
                 </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card">
+          <div className="flex-between" style={{ marginBottom: '16px' }}>
+            <div className="section-title" style={{ margin: 0 }}>Education</div>
+            <button className="btn-secondary" onClick={() => setEducations([...educations, { ...emptyEducation }])}>+ Add</button>
+          </div>
+
+          {educations.map((edu, idx) => (
+            <div key={edu.id || idx} className="education-item">
+              <div className="flex-between" style={{ marginBottom: '12px' }}>
+                <div className="work-role">School {idx + 1}</div>
+                {educations.length > 1 && (
+                  <button className="btn-danger" onClick={() => setEducations(educations.filter((_, i) => i !== idx))}>Remove</button>
+                )}
+              </div>
 
 
 
-                <div className="row">
-                  <div>
-                    <label style={{ marginTop: 0 }}>School</label>
-                    <Autocomplete
-                      value={edu.school_name || ''}
-                      options={universities}
-                      placeholder="e.g. Stanford University"
-                      onChange={(val) => {
-                        const newEdu = [...educations];
-                        newEdu[idx].school_name = val;
-                        setEducations(newEdu);
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ marginTop: 0 }}>Degree</label>
-                    <Autocomplete
-                      value={edu.degree_type || ''}
-                      options={degrees}
-                      placeholder="e.g. Bachelor of Science"
-                      onChange={(val) => {
-                        const newEdu = [...educations];
-                        newEdu[idx].degree_type = val;
-                        setEducations(newEdu);
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="row">
-                  <div style={{ flex: 1 }}>
-                    <label style={{ marginTop: 0 }}>Major</label>
-                    <Autocomplete
-                      value={edu.major || ''}
-                      options={majors}
-                      placeholder="e.g. Computer Science"
-                      onChange={(val) => {
-                        const newEdu = [...educations];
-                        newEdu[idx].major = val;
-                        setEducations(newEdu);
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="row">
-                  <MonthYearSelect
-                    labelPrefix="Start"
-                    month={edu.start_month}
-                    year={edu.start_year}
-                    onChangeMonth={(val) => {
+              <div className="row">
+                <div>
+                  <label style={{ marginTop: 0 }}>School</label>
+                  <Autocomplete
+                    value={edu.school_name || ''}
+                    options={universities}
+                    placeholder="e.g. Stanford University"
+                    onChange={(val) => {
                       const newEdu = [...educations];
-                      newEdu[idx].start_month = val;
-                      setEducations(newEdu);
-                    }}
-                    onChangeYear={(val) => {
-                      const newEdu = [...educations];
-                      newEdu[idx].start_year = val;
+                      newEdu[idx] = { ...newEdu[idx], school_name: val };
                       setEducations(newEdu);
                     }}
                   />
-                  <MonthYearSelect
-                    labelPrefix="End"
-                    month={edu.end_month}
-                    year={edu.end_year}
-                    onChangeMonth={(val) => {
+                </div>
+                <div>
+                  <label style={{ marginTop: 0 }}>Degree</label>
+                  <Autocomplete
+                    value={edu.degree_type || ''}
+                    options={degrees}
+                    placeholder="e.g. Bachelor of Science"
+                    onChange={(val) => {
                       const newEdu = [...educations];
-                      newEdu[idx].end_month = val;
-                      setEducations(newEdu);
-                    }}
-                    onChangeYear={(val) => {
-                      const newEdu = [...educations];
-                      newEdu[idx].end_year = val;
+                      newEdu[idx] = { ...newEdu[idx], degree_type: val };
                       setEducations(newEdu);
                     }}
                   />
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {authStatus && (
-        <div style={{
-          position: 'fixed', bottom: '20px', right: '20px',
-          background: '#333', color: 'white', padding: '10px 20px',
-          borderRadius: '8px', fontSize: '13px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-        }}>
-          {authStatus}
+              <div className="row">
+                <div style={{ flex: 1 }}>
+                  <label style={{ marginTop: 0 }}>Major</label>
+                  <Autocomplete
+                    value={edu.major || ''}
+                    options={majors}
+                    placeholder="e.g. Computer Science"
+                    onChange={(val) => {
+                      const newEdu = [...educations];
+                      newEdu[idx] = { ...newEdu[idx], major: val };
+                      setEducations(newEdu);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="row">
+                <MonthYearSelect
+                  labelPrefix="Start"
+                  month={edu.start_month}
+                  year={edu.start_year}
+                  onChangeMonth={(val) => {
+                    const newEdu = [...educations];
+                    newEdu[idx] = { ...newEdu[idx], start_month: val };
+                    setEducations(newEdu);
+                  }}
+                  onChangeYear={(val) => {
+                    const newEdu = [...educations];
+                    newEdu[idx] = { ...newEdu[idx], start_year: val };
+                    setEducations(newEdu);
+                  }}
+                />
+                <MonthYearSelect
+                  labelPrefix="End"
+                  month={edu.end_month}
+                  year={edu.end_year}
+                  onChangeMonth={(val) => {
+                    const newEdu = [...educations];
+                    newEdu[idx].end_month = val;
+                    setEducations(newEdu);
+                  }}
+                  onChangeYear={(val) => {
+                    const newEdu = [...educations];
+                    newEdu[idx].end_year = val;
+                    setEducations(newEdu);
+                  }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
-      )}
-    </div>
+      </div>
+      {/* )} */}
+
+      {
+        authStatus && (
+          <div style={{
+            position: 'fixed', bottom: '20px', right: '20px',
+            background: '#333', color: 'white', padding: '10px 20px',
+            borderRadius: '8px', fontSize: '13px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          }}>
+            {authStatus}
+          </div>
+        )
+      }
+    </div >
   );
 }

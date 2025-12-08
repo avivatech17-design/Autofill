@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { tables } from '@/lib/supabaseClient';
 
+export const dynamic = 'force-dynamic';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const resumeBucket =
@@ -45,6 +47,8 @@ export async function GET(request) {
     );
   }
 
+  console.log('DEBUG: API GET profile for user:', user.id);
+
   const { data: profile, error: profileError } = await supabase
     .from(tables.profile)
     .select('*')
@@ -78,6 +82,8 @@ export async function GET(request) {
       .eq('user_id', user.id),
   ]);
 
+  console.log('DEBUG: API GET experiences:', JSON.stringify(expRes.data), expRes.error);
+
   let resumeUrl = null;
   if (profile?.resume_path) {
     const { data: signed, error: signedError } = await supabase.storage
@@ -88,6 +94,11 @@ export async function GET(request) {
     } else {
       resumeUrl = signed?.signedUrl || null;
     }
+  }
+
+  // Add user email to profile if not present or empty
+  if (profile && (!profile.email || profile.email.trim() === '') && user.email) {
+    profile.email = user.email;
   }
 
   return NextResponse.json({

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Mock Lazy Dropdown Test</title>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const select = document.getElementById('country');
+            const result = document.getElementById('result');
+            const resultText = document.getElementById('result-text');
+            let loaded = false;
+
+            // Simulate lazy loading options on click/focus
+            function loadOptions() {
+                if (loaded) return;
+                setTimeout(() => {
+                    console.log('Loading options...');
+                    select.innerHTML = `
+                <option value="">please select</option>
+                <option value="1223">United States</option>
+                <option value="1002">Afghanistan</option>
+                <option value="1038">Canada</option>
+            `;
+                    loaded = true;
+                    console.log('Options loaded');
+                }, 300); // 300ms delay
+            }
+
+            select.addEventListener('mousedown', loadOptions);
+            select.addEventListener('focus', loadOptions);
+            select.addEventListener('click', loadOptions);
+
+            select.addEventListener('change', (e) => {
+                result.textContent = 'Selected Value: ' + e.target.value;
+                if (select.selectedIndex >= 0) {
+                    resultText.textContent = 'Selected Text: ' + select.options[select.selectedIndex].text;
+                }
+            });
+        });
+    </script>
+</head>
+
+<body>
+
+    <div class="form-group">
+        <label for="country">Country</label>
+        <select id="country" class="form-control">
+            <option value="">Loading...</option>
+        </select>
+    </div>
+
+    <div id="result">Selected Value: None</div>
+    <div id="result-text">Selected Text: None</div>
+
+</body>
+
+</html>

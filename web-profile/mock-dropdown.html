@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Mock Dropdown Test</title>
+    <!-- Mocking React-like environment where value setter might be hijacked -->
+    <script>
+        // Simple check to show if value changed
+        document.addEventListener('DOMContentLoaded', () => {
+            const select = document.getElementById('country');
+            select.addEventListener('change', (e) => {
+                document.getElementById('result').textContent = 'Selected Value: ' + e.target.value;
+                document.getElementById('result-text').textContent = 'Selected Text: ' + select.options[select.selectedIndex].text;
+            });
+        });
+    </script>
+</head>
+
+<body>
+
+    <!-- User Provided HTML Snippet -->
+    <div class="form-group field field-string field-error has-error has-danger">
+        <label class="control-label" for="country" id="country-label">Country<span class="required"
+                aria-hidden="true">*</span></label>
+        <select id="country" class="form-control" autocomplete="cntry-name" required=""
+            data-gtm-form-interact-field-id="5">
+            <option value="">please select</option>
+            <option value="1223">United States</option>
+            <option value="1002">Afghanistan</option>
+            <option value="1005">Albania</option>
+            <option value="1038">Canada</option>
+            <option value="1057">Germany</option>
+        </select>
+        <div class="col">
+            <ul id="country-errorMsg" class="error-detail bs-callout bs-callout-info" role="alert" tabindex="0">
+                <li role="alert" class="text-danger" aria-label="This field is required">This field is required</li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="result">Selected Value: None</div>
+    <div id="result-text">Selected Text: None</div>
+
+</body>
+
+</html>

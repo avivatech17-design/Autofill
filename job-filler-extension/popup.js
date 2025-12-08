@@ -180,13 +180,22 @@ async function fetchSupabaseProfile() {
 
   // Try central API first
   try {
+    console.log('[EXTENSION] Fetching from API:', supaConfig.apiBase || DEFAULT_API_BASE);
     const apiRes = await fetch(supaConfig.apiBase || DEFAULT_API_BASE, {
       headers: {
         Authorization: `Bearer ${supaSession.access_token}`,
       },
     });
+    console.log('[EXTENSION] API Response status:', apiRes.status);
     if (apiRes.ok) {
       const payload = await apiRes.json();
+      console.log('[EXTENSION] Payload received:', {
+        hasProfile: !!payload.profile,
+        experiencesCount: payload.experiences?.length || 0,
+        educationsCount: payload.educations?.length || 0,
+        skillsCount: payload.skills?.length || 0,
+        languagesCount: payload.languages?.length || 0
+      });
       const row = payload.profile;
       if (row) {
         const nameParts = (row.full_name || "").trim().split(/\s+/);
@@ -197,7 +206,7 @@ async function fetchSupabaseProfile() {
           fullName: row.full_name,
           firstName,
           lastName,
-          email: row.email,
+          email: row.email || supaSession.user?.email || '',
           phone: row.phone,
           city: row.city,
           state: row.state,
@@ -217,6 +226,11 @@ async function fetchSupabaseProfile() {
           skills: payload.skills || [],
           languages: payload.languages || [],
         };
+        console.log('[EXTENSION] currentProfile set with:', {
+          name: currentProfile.fullName,
+          experiencesCount: currentProfile.experiences.length,
+          educationsCount: currentProfile.educations.length
+        });
         chrome.storage.local.set({ cachedProfile: currentProfile });
         setSbStatus("Profile synced from cloud.");
         if (payload.resumeUrl) {
@@ -230,10 +244,12 @@ async function fetchSupabaseProfile() {
       }
     }
   } catch (e) {
+    console.error('[EXTENSION] API fetch error:', e);
     // continue to fallback
   }
 
   // Fallback to direct Supabase REST
+  console.log('[EXTENSION] Falling back to direct Supabase REST');
   try {
     const res = await fetch(
       `${supaConfig.url}/rest/v1/profiles?select=*&id=eq.${userId}`,
@@ -245,8 +261,10 @@ async function fetchSupabaseProfile() {
         },
       }
     );
+    console.log('[EXTENSION] Supabase profiles response:', res.status);
     if (!res.ok) {
       const text = await res.text();
+      console.error('[EXTENSION] Supabase profile fetch failed:', text);
       setSbStatus(`Profile fetch failed: ${text}`);
       return;
     }
@@ -261,7 +279,7 @@ async function fetchSupabaseProfile() {
         fullName: row.full_name,
         firstName,
         lastName,
-        email: row.email,
+        email: row.email || supaSession.user?.email || '',
         phone: row.phone,
         city: row.city,
         state: row.state,
@@ -275,9 +293,50 @@ async function fetchSupabaseProfile() {
         company: row.current_company,
         password: "",
         confirmPassword: "",
-        experiences: [], // Fallback doesn't fetch these yet
+        experiences: [],
         educations: [],
       };
+
+      // Fetch experiences and educations in parallel
+      console.log('[EXTENSION] Fetching experiences/educations from Supabase for user:', userId);
+      try {
+        const [expRes, eduRes] = await Promise.all([
+          fetch(`${supaConfig.url}/rest/v1/autofill_experiences?user_id=eq.${userId}&select=*`, {
+            headers: {
+              apikey: supaConfig.anonKey,
+              Authorization: `Bearer ${supaSession.access_token}`,
+              Accept: "application/json",
+            },
+          }),
+          fetch(`${supaConfig.url}/rest/v1/autofill_educations?user_id=eq.${userId}&select=*`, {
+            headers: {
+              apikey: supaConfig.anonKey,
+              Authorization: `Bearer ${supaSession.access_token}`,
+              Accept: "application/json",
+            },
+          })
+        ]);
+
+        console.log('[EXTENSION] Experiences response:', expRes.status);
+        console.log('[EXTENSION] Educations response:', eduRes.status);
+
+        if (expRes.ok) {
+          const expData = await expRes.json();
+          console.log('[EXTENSION] Experiences data:', expData.length, expData);
+          currentProfile.experiences = expData;
+        } else {
+          console.error('[EXTENSION] Experiences fetch failed:', await expRes.text());
+        }
+        if (eduRes.ok) {
+          const eduData = await eduRes.json();
+          console.log('[EXTENSION] Educations data:', eduData.length, eduData);
+          currentProfile.educations = eduData;
+        } else {
+          console.error('[EXTENSION] Educations fetch failed:', await eduRes.text());
+        }
+      } catch (subErr) {
+        console.error("Failed to fetch details", subErr);
+      }
       chrome.storage.local.set({ cachedProfile: currentProfile });
       setSbStatus("Profile synced from Supabase.");
       if (row.resume_path) {
@@ -415,6 +474,11 @@ openWebBtn.addEventListener("click", () => {
 });
 
 function renderProfileUI() {
+  console.log('[EXTENSION] renderProfileUI called with currentProfile:', {
+    hasProfile: !!currentProfile,
+    experiencesCount: currentProfile?.experiences?.length || 0,
+    educationsCount: currentProfile?.educations?.length || 0
+  });
   if (!currentProfile) {
     profileView.style.display = "none";
     loginView.style.display = "block";
@@ -472,6 +536,7 @@ function renderProfileUI() {
     if (title) expList.appendChild(title);
 
     const exps = currentProfile.experiences || [];
+    console.log('[EXTENSION] Rendering experiences:', exps.length, exps);
     if (exps.length === 0) {
       const empty = document.createElement("div");
       empty.style.textAlign = "center";
@@ -516,6 +581,7 @@ function renderProfileUI() {
     if (title) eduList.appendChild(title);
 
     const edus = currentProfile.educations || [];
+    console.log('[EXTENSION] Rendering educations:', edus.length, edus);
     if (edus.length === 0) {
       const empty = document.createElement("div");
       empty.style.textAlign = "center";

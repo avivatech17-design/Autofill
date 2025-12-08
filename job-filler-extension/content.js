@@ -19,9 +19,14 @@
       ""
     ).toLowerCase();
 
+    const autocomplete = (input.autocomplete || input.getAttribute("autocomplete") || "").toLowerCase();
+
     return keywords.some((kw) => {
       if (!kw) return false;
       kw = kw.toLowerCase();
+      // Strict match for autocomplete
+      if (autocomplete === kw || (autocomplete.includes(kw) && kw.length > 3)) return true;
+
       return (
         name.includes(kw) ||
         id.includes(kw) ||
@@ -169,46 +174,99 @@
     }
   }
 
-  function tryCustomDropdown(keywords, variants, allowFallback = false) {
+  async function tryCustomDropdown(keywords, variants, allowFallback = false) {
     const dropdowns = Array.from(
-      document.querySelectorAll("[role='combobox'], [aria-haspopup='listbox'], [data-testid*='select'], .select, .Select, [data-selectable]")
+      document.querySelectorAll(
+        `select, [role='combobox'], [aria-haspopup='listbox'], [aria-haspopup='true'],
+         [data-testid*='select'], button[aria-expanded], .dropdown-toggle,
+         .select, .Select, [data-selectable], [class*='select'], [class*='dropdown']`
+      )
     ).filter(visible);
 
     const matchesKw = (el) => fieldMatches(el, keywords);
 
     for (const dd of dropdowns) {
       if (!matchesKw(dd)) continue;
+
       try {
+        dd.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         dd.click();
+        dd.focus();
       } catch (_) { }
-      // small delay-free search of options currently in DOM
-      const options = Array.from(
-        document.querySelectorAll("[role='option'], li, [data-testid*='option'], .option, .Select-option")
-      );
+
+      // WAIT for options to appear (modern dropdowns load asynchronously)
+      await new Promise(r => setTimeout(r, 600));
+
+      // Gather options
+      let options = [];
+      if (dd.tagName === 'SELECT') {
+        // Refresh options from DOM in case they were lazy loaded
+        options = Array.from(dd.children).filter(c => c.tagName === 'OPTION');
+        if (options.length === 0) options = Array.from(dd.options);
+      }
+
+      // Also look for custom options in document (for custom dropdowns)
+      const customOptions = Array.from(
+        document.querySelectorAll(
+          `[role='option'], li:not([role='presentation']), 
+           [data-testid*='option'], .option, .Select-option,
+           [class*='option'], [class*='item'], ul li`
+        )
+      ).filter(visible);
+
+      options = options.concat(customOptions);
+
       const isPlaceholder = (text) => {
-        const t = (text || "").toLowerCase();
+        const t = (text || "").toLowerCase().trim();
         return (
           !t ||
-          t.includes("select") ||
-          t.includes("choose") ||
-          t.includes("none") ||
-          t.includes("option") ||
-          t.includes("----")
+          t === "select" ||
+          t === "please select" ||
+          t === "choose" ||
+          t === "none" ||
+          t === "select an option" ||
+          t.includes("----") ||
+          t === "..."
         );
       };
 
+      // Try exact and fuzzy matches
       for (const opt of options) {
-        const text = (opt.innerText || opt.textContent || "").trim().toLowerCase();
-        if (!text) continue;
+        const text = (opt.innerText || opt.textContent || "").trim();
+        if (!text || isPlaceholder(text)) continue;
+
+        const textLower = text.toLowerCase();
+        // Skip placeholder values sometimes hidden in options
+        if (textLower === "select..." || textLower === "select") continue;
+
         for (const v of variants) {
-          const norm = (v || "").toString().toLowerCase();
-          if (norm && (text === norm || text.includes(norm))) {
+          const norm = (v || "").toString().toLowerCase().trim();
+          if (!norm) continue;
+
+          // Exact match
+          if (textLower === norm) {
             try {
-              opt.click();
+              if (dd.tagName === 'SELECT') {
+                dd.value = opt.value;
+                dd.dispatchEvent(new Event('change', { bubbles: true }));
+              } else {
+                opt.click();
+              }
               return true;
-            } catch (_) {
-              continue;
-            }
+            } catch (_) { continue; }
+          }
+
+          // Contains match
+          if (textLower.includes(norm) || norm.includes(textLower)) {
+            try {
+              if (dd.tagName === 'SELECT') {
+                dd.value = opt.value;
+                dd.dispatchEvent(new Event('change', { bubbles: true }));
+              } else {
+                opt.click();
+              }
+              return true;
+            } catch (_) { continue; }
           }
         }
       }
@@ -220,7 +278,12 @@
         });
         if (fallback) {
           try {
-            fallback.click();
+            if (dd.tagName === 'SELECT') {
+              dd.value = fallback.value;
+              dd.dispatchEvent(new Event('change', { bubbles: true }));
+            } else {
+              fallback.click();
+            }
             return true;
           } catch (_) {
             /* ignore */
@@ -298,92 +361,108 @@
     const educations = safeProfile.educations || [];
 
     const clickAddForSection = (keywords, itemType) => {
-      // Bottom-up approach: Find buttons first
-      const buttons = Array.from(document.querySelectorAll("button, a[role='button'], div[role='button'], input[type='button']"))
-        .filter(visible);
+      // 1. Find the section container
+      // Workday structure: <div role="group" aria-labelledby="Work-Experience-section">
+      const groups = Array.from(document.querySelectorAll("div[role='group']")).filter(visible);
 
-      const addButtons = buttons.filter(btn => {
-        const txt = (btn.innerText || btn.value || "").toLowerCase();
-        const testId = (btn.getAttribute("data-automation-id") || "").toLowerCase();
-        // Match "Add", "Add Another", "Add Work Experience", etc.
-        return (txt.includes("add") || testId.includes("add")) && !txt.includes("save") && !txt.includes("submit");
-      });
+      let targetGroup = null;
 
-      for (const btn of addButtons) {
-        // Find the closest header or section label for this button
-        // We look up the tree, and for each parent, we look for a header *within* that parent (or the parent itself)
-        let parent = btn.parentElement;
-        let foundHeader = null;
-
-        // Traverse up to find a container that has a relevant header
-        while (parent && parent !== document.body) {
-          // Check if parent is aria-labelledby
-          const labelledBy = parent.getAttribute("aria-labelledby");
-          if (labelledBy) {
-            const header = document.getElementById(labelledBy);
-            if (header && keywords.some(kw => (header.innerText || "").toLowerCase().includes(kw))) {
-              foundHeader = header;
-              break;
-            }
-          }
-
-          // Check for headers inside this parent
-          const headers = Array.from(parent.querySelectorAll("h1, h2, h3, h4, h5, h6, label, legend"))
-            .filter(el => visible(el) && keywords.some(kw => (el.innerText || "").toLowerCase().includes(kw)));
-
-          if (headers.length > 0) {
-            // Found a header in this container. 
-            // We assume this container is the section.
-            foundHeader = headers[0];
+      for (const group of groups) {
+        // Check aria-labelledby
+        const labelledBy = group.getAttribute("aria-labelledby");
+        if (labelledBy) {
+          const header = document.getElementById(labelledBy);
+          if (header && keywords.some(kw => (header.innerText || "").toLowerCase().includes(kw))) {
+            targetGroup = group;
             break;
           }
-
-          parent = parent.parentElement;
-          if (!parent) break;
         }
 
-        if (foundHeader) {
-          // We found a button belonging to the correct section.
-          // Now check counts.
-          // We search for inputs within the *same container* where we found the header (which is `parent`)
-          const container = parent;
-          const inputs = Array.from(container.querySelectorAll("input:not([type='hidden']), select, textarea")).filter(visible);
-
-          let visibleCount = 0;
-          if (itemType === 'work') {
-            const companies = inputs.filter(i => fieldMatches(i, ["company", "employer", "organization"]));
-            const titles = inputs.filter(i => fieldMatches(i, ["title", "role", "position"]));
-            visibleCount = Math.max(companies.length, titles.length);
-          } else if (itemType === 'education') {
-            const schools = inputs.filter(i => fieldMatches(i, ["school", "university", "college", "institution"]));
-            const degrees = inputs.filter(i => fieldMatches(i, ["degree", "qualification"]));
-            visibleCount = Math.max(schools.length, degrees.length);
-          }
-
-          const needed = itemType === 'work' ? experiences.length : educations.length;
-
-          if (visibleCount < needed && needed > 0) {
-            btn.click();
-            return true;
+        // Check internal headers if no aria-labelledby match
+        if (!targetGroup) {
+          const headers = Array.from(group.querySelectorAll("h1, h2, h3, h4, h5, h6, legend"))
+            .filter(el => visible(el) && keywords.some(kw => (el.innerText || "").toLowerCase().includes(kw)));
+          if (headers.length > 0) {
+            targetGroup = group;
+            break;
           }
         }
       }
+
+      if (!targetGroup) return false;
+
+      // 2. Count existing items in this group
+      // We look for sub-groups or sets of inputs that define an item.
+      // In Workday, items are often in <div class="css-1ebprri"> or similar, but let's rely on input counts.
+      const inputs = Array.from(targetGroup.querySelectorAll("input:not([type='hidden']), select, textarea")).filter(visible);
+
+      let visibleCount = 0;
+      if (itemType === 'work') {
+        // Count unique sets of "Company" or "Title" fields
+        // A simple heuristic: count the number of "Company" fields
+        const companies = inputs.filter(i => fieldMatches(i, ["company", "employer", "organization"]));
+        const titles = inputs.filter(i => fieldMatches(i, ["title", "role", "position"]));
+        // If we find 0, maybe they are not labeled standardly. 
+        // Let's try to count "Add" buttons? No, we want to count FORMS.
+        // If 0 inputs found, maybe the form isn't open yet?
+        visibleCount = Math.max(companies.length, titles.length);
+      } else if (itemType === 'education') {
+        const schools = inputs.filter(i => fieldMatches(i, ["school", "university", "college", "institution"]));
+        const degrees = inputs.filter(i => fieldMatches(i, ["degree", "qualification"]));
+        visibleCount = Math.max(schools.length, degrees.length);
+      }
+
+      const needed = itemType === 'work' ? experiences.length : educations.length;
+
+      // 3. If we need more, find the Add button IN THIS GROUP and click it
+      if (visibleCount < needed && needed > 0) {
+        // Look for the specific Add button
+        // Workday: <button data-automation-id="add-button">Add</button>
+        const buttons = Array.from(targetGroup.querySelectorAll("button, div[role='button']")).filter(visible);
+        const addButton = buttons.find(btn => {
+          const txt = (btn.innerText || "").toLowerCase();
+          const testId = (btn.getAttribute("data-automation-id") || "").toLowerCase();
+          return (txt === "add" || txt === "add another" || testId === "add-button");
+        });
+
+        if (addButton) {
+          addButton.click();
+          return true; // We clicked, so return true to trigger a retry
+        }
+      }
+
       return false;
     };
 
     let clicked = false;
+    // Prioritize Work Experience
     if (clickAddForSection(["work experience", "employment history"], 'work')) clicked = true;
+    // Only click one at a time to allow UI to update
     if (!clicked && clickAddForSection(["education", "academic history"], 'education')) clicked = true;
 
     return clicked;
   }
 
-  function fillForm(profile) {
+  async function fillForm(profile) {
+    console.log("ANTIGRAVITY: Filling Form with Profile:", Object.keys(profile));
+    console.log("ANTIGRAVITY: Profile Values:", {
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      email: profile.email,
+      phone: profile.phone
+    });
+
+    // Polyfill First/Last name if missing
+    if (profile.fullName && !profile.firstName) {
+
+      const parts = profile.fullName.trim().split(/\s+/);
+      profile.firstName = parts[0];
+      profile.lastName = parts.slice(1).join(" ");
+    }
+    if (!profile.firstName && profile.first_name) profile.firstName = profile.first_name;
+    if (!profile.lastName && profile.last_name) profile.lastName = profile.last_name;
     // Check if we need to expand sections first
-    // We pass 'true' to indicate we are in the initial expansion phase
     if (checkAndClickAddButtons(profile)) {
-      // If we clicked a button, wait a bit and retry filling
-      // We need to wait long enough for the form to appear
       setTimeout(() => fillForm(profile), 1000);
       return;
     }
@@ -391,6 +470,141 @@
     const safeProfile = profile || {};
     const exp0 = (safeProfile.experiences && safeProfile.experiences[0]) || {};
     const edu0 = (safeProfile.educations && safeProfile.educations[0]) || {};
+
+    // TRY CUSTOM DROPDOWNS FIRST (for modern React/Angular forms)
+    // Country
+    if (safeProfile.country) {
+      await tryCustomDropdown(
+        ["country"],
+        [safeProfile.country, "united states", "usa", "us", "america", "united states of america"]
+      );
+    }
+
+    // State
+    if (safeProfile.state) {
+      await tryCustomDropdown(
+        ["state", "province", "region"],
+        [safeProfile.state]
+      );
+    }
+
+    // --- JOB PREFERENCES & EEO ---
+
+    // Source / Hear About
+    if (safeProfile.question_hear_about) {
+      await tryCustomDropdown(
+        ["how did you hear", "source", "hear about"],
+        [safeProfile.question_hear_about, "LinkedIn", "Other"],
+        true
+      );
+    } else {
+      await tryCustomDropdown(["how did you hear", "source"], ["LinkedIn", "Other"], true);
+    }
+
+    // Used Product
+    if (safeProfile.question_used_product) {
+      await tryCustomDropdown(
+        ["used robinhood", "used our product", "product"],
+        [safeProfile.question_used_product],
+        true
+      );
+    }
+
+    // Work Authorization
+    const authVal = safeProfile.question_work_auth || "Yes";
+    await tryCustomDropdown(
+      ["legally authorized", "authorized to work", "work authorization"],
+      [authVal, "i am authorized"],
+      true
+    );
+
+    // Sponsorship
+    const sponsorVal = safeProfile.question_sponsorship || "No";
+    await tryCustomDropdown(
+      ["sponsorship", "require sponsorship", "visa sponsorship"],
+      [sponsorVal, "i do not require"],
+      true
+    );
+
+    // Relocation
+    await tryCustomDropdown(
+      ["relocation", "willing to relocate", "open to relocation", "office location"],
+      ["yes", "true", "wa", "seattle"],
+      true
+    );
+
+    // Worked Before
+    if (safeProfile.question_worked_before) {
+      await tryCustomDropdown(
+        ["worked for", "previous employment", "worked here before", "intern", "contractor"],
+        [safeProfile.question_worked_before],
+        true
+      );
+    }
+
+    // Pronouns
+    if (safeProfile.question_pronouns) {
+      await tryCustomDropdown(
+        ["pronouns"],
+        [safeProfile.question_pronouns],
+        true
+      );
+    }
+
+    // Gender
+    if (safeProfile.question_gender) {
+      await tryCustomDropdown(
+        ["gender"],
+        [safeProfile.question_gender],
+        true
+      );
+    }
+
+    // LGBTQ
+    if (safeProfile.question_lgbtq) {
+      await tryCustomDropdown(
+        ["lgbtq", "sexual orientation"],
+        [safeProfile.question_lgbtq],
+        true
+      );
+    }
+
+    // Military
+    if (safeProfile.question_military_status) {
+      await tryCustomDropdown(
+        ["military", "veteran"],
+        [safeProfile.question_military_status],
+        true
+      );
+    }
+
+    // Conflict of Interest
+    await tryCustomDropdown(
+      ["conflict of interest", "relationships", "outside business"],
+      [safeProfile.question_conflict_interest || "No"],
+      true
+    );
+
+
+    // Gov Official
+    await tryCustomDropdown(
+      ["government official", "corruption"],
+      [safeProfile.question_gov_official || "No"],
+      true
+    );
+
+    await tryCustomDropdown(
+      ["background check", "submit to background"],
+      ["yes", "y", "true", "acknowledge", "confirm"],
+      true
+    );
+
+    const degree = (edu0.degree_type || safeProfile.degree || "").trim() || "Bachelor";
+    await tryCustomDropdown(
+      ["education level", "highest level", "level of education"],
+      [degree, "bachelor", "bachelors", "bachelor's degree"],
+      true
+    );
 
     const inputs = Array.from(
       document.querySelectorAll("input, textarea, select, [contenteditable='true']")
@@ -491,7 +705,10 @@
       return [val];
     };
 
-    inputs.forEach((input) => {
+    // Convert to sequential loop to prevent UI race conditions
+    for (const input of inputs) {
+      if (!visible(input)) continue;
+
       // Previous Employment / Current Employee Questions -> Default NO
       if (input.type === 'radio' || input.tagName === 'SELECT') {
         const question = (
@@ -506,20 +723,23 @@
           // It's a relevant question. Try to select "No".
           if (input.tagName === 'SELECT') {
             // Try to find "No" option
+            let setNo = false;
             for (const opt of input.options) {
               const txt = (opt.text || "").toLowerCase();
               if (txt === "no" || txt === "false") {
                 input.value = opt.value;
                 input.dispatchEvent(new Event("change", { bubbles: true }));
-                return;
+                setNo = true;
+                break;
               }
             }
+            if (setNo) continue;
           } else if (input.type === 'radio') {
             const label = (input.nextElementSibling?.innerText || input.parentElement?.innerText || "").toLowerCase();
             const val = (input.value || "").toLowerCase();
             if (label.includes("no") || val === "no" || val === "false" || val === "0") {
               input.click();
-              return;
+              continue;
             }
           }
         }
@@ -528,6 +748,16 @@
       if (input.tagName === "SELECT") {
         // Handle dropdowns
         const select = input;
+
+        // Lazy load support: Click and wait (aggressive)
+        try {
+          select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+          select.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          select.click();
+          select.focus();
+        } catch (e) { }
+
+        await new Promise(r => setTimeout(r, 600));
 
         const trySelect = (val) => {
           if (!val) return false;
@@ -539,9 +769,15 @@
             const normText = normalize(text);
             const normValue = normalize(value);
             if (normText === normTarget || normValue === normTarget) {
-              select.value = opt.value;
+              // React 16+ Overrides "value" setter, so use setNativeValue logic
+              try {
+                setNativeValue(select, opt.value);
+              } catch (e) {
+                select.value = opt.value;
+              }
               select.dispatchEvent(new Event("input", { bubbles: true }));
               select.dispatchEvent(new Event("change", { bubbles: true }));
+              select.dispatchEvent(new Event("blur", { bubbles: true }));
               return true;
             }
           }
@@ -550,9 +786,14 @@
             const text = (opt.textContent || "").trim();
             const normText = normalize(text);
             if (normText.includes(normTarget)) {
-              select.value = opt.value;
+              try {
+                setNativeValue(select, opt.value);
+              } catch (e) {
+                select.value = opt.value;
+              }
               select.dispatchEvent(new Event("input", { bubbles: true }));
               select.dispatchEvent(new Event("change", { bubbles: true }));
+              select.dispatchEvent(new Event("blur", { bubbles: true }));
               return true;
             }
           }
@@ -596,142 +837,30 @@
           montana: "mt",
           nebraska: "ne",
           nevada: "nv",
-          "newhampshire": "nh",
-          "newjersey": "nj",
-          "newmexico": "nm",
-          "newyork": "ny",
-          "northcarolina": "nc",
-          "northdakota": "nd",
+          newhampshire: "nh",
+          newjersey: "nj",
+          newmexico: "nm",
+          newyork: "ny",
+          northcarolina: "nc",
+          northdakota: "nd",
           ohio: "oh",
           oklahoma: "ok",
           oregon: "or",
           pennsylvania: "pa",
-          "rhodeisland": "ri",
-          "southcarolina": "sc",
-          "southdakota": "sd",
+          rhodeisland: "ri",
+          southcarolina: "sc",
+          southdakota: "sd",
           tennessee: "tn",
           texas: "tx",
           utah: "ut",
           vermont: "vt",
           virginia: "va",
           washington: "wa",
-          "westvirginia": "wv",
+          westvirginia: "wv",
           wisconsin: "wi",
           wyoming: "wy",
-          "districtofcolumbia": "dc",
+          "district of columbia": "dc",
         };
-
-        const stateVariants = (val) => {
-          const norm = normalize(val);
-          const variants = [];
-          if (norm.length <= 3) {
-            // abbreviation provided; look for full
-            const full = Object.keys(stateMap).find(
-              (name) => stateMap[name] === norm
-            );
-            if (full) variants.push(full);
-          } else {
-            const abbr = stateMap[norm];
-            if (abbr) variants.push(abbr);
-          }
-          return variants;
-        };
-
-        // State
-        if (
-          fieldMatches(select, ["state", "province", "region"]) &&
-          profile.state
-        ) {
-          if (trySelectVariants(profile.state, stateVariants(profile.state)))
-            return;
-
-          // Improved State Matching for Dropdowns
-          // Try to match by full text, fuzzy match, or abbreviation
-          const targetState = normalize(profile.state);
-          for (const opt of Array.from(select.options)) {
-            const text = normalize(opt.textContent || "");
-            const val = normalize(opt.value || "");
-
-            // Exact match
-            if (text === targetState || val === targetState) {
-              select.value = opt.value;
-              select.dispatchEvent(new Event("change", { bubbles: true }));
-              return;
-            }
-
-            // Check if option contains target (e.g. "California (CA)" contains "california")
-            if (text.includes(targetState)) {
-              select.value = opt.value;
-              select.dispatchEvent(new Event("change", { bubbles: true }));
-              return;
-            }
-          }
-        }
-
-        // Heuristic: select likely containing US states
-        if (profile.state) {
-          const optionsText = Array.from(select.options).map((o) =>
-            normalize(o.textContent || o.value || "")
-          );
-          const stateHits = optionsText.filter((t) => stateMap[t]).length;
-          if (optionsText.length >= 20 && stateHits >= 5) {
-            if (trySelectVariants(profile.state, stateVariants(profile.state)))
-              return;
-          }
-        }
-
-        // Country
-        if (fieldMatches(select, ["country"]) && profile.country) {
-          if (trySelect(profile.country)) return;
-        }
-
-        // City
-        if (fieldMatches(select, ["city", "location"]) && profile.city) {
-          if (trySelect(profile.city)) return;
-        }
-
-        // Start Month / From Month
-        if (
-          fieldMatches(select, ["start month", "from month", "from", "start"]) &&
-          defaultAnswers.startMonth
-        ) {
-          if (trySelectVariants(defaultAnswers.startMonth, monthVariants(defaultAnswers.startMonth)))
-            return;
-        }
-
-        // End Month / To Month
-        if (
-          fieldMatches(select, ["end month", "to month", "to", "end"])
-        ) {
-          // If currently working here, try to select empty or "Present" if available, or just skip
-          if (profile.is_current || safeProfile.is_current) {
-            if (trySelectVariants("", ["", "present", "current"])) return;
-          } else if (defaultAnswers.endMonth) {
-            if (trySelectVariants(defaultAnswers.endMonth, monthVariants(defaultAnswers.endMonth)))
-              return;
-          }
-        }
-
-        // Start Year
-        if (
-          fieldMatches(select, ["start year", "from year", "start"]) &&
-          defaultAnswers.startYear
-        ) {
-          if (trySelect(String(defaultAnswers.startYear))) return;
-        }
-
-        // End Year
-        if (
-          fieldMatches(select, ["end year", "to year", "end"])
-        ) {
-          if (profile.is_current || safeProfile.is_current) {
-            if (trySelectVariants("", ["", "present", "current"])) return;
-          } else if (defaultAnswers.endYear) {
-            if (trySelect(String(defaultAnswers.endYear))) return;
-          }
-        }
-
-        // Degree / Field of study
         if (fieldMatches(select, ["degree", "education level", "qualification"])) {
           const variants = degreeVariants(defaultAnswers.degree);
           if (trySelectVariants(defaultAnswers.degree, variants)) return;
@@ -804,6 +933,14 @@
       }
 
       if (input.type === "checkbox") {
+        // Agree / Consent / Privacy / SMS
+        const label = (input.nextElementSibling?.innerText || input.parentElement?.innerText || "").toLowerCase();
+        const agreeKeywords = ["agree", "consent", "acknowledge", "privacy", "policy", "communications", "sms", "text message", "updates", "certify", "declare", "confirm"];
+        if (agreeKeywords.some(kw => label.includes(kw))) {
+          setCheckbox(input, true);
+          return;
+        }
+
         // Currently working here
         if (fieldMatches(input, ["currently", "current", "i currently work"]) || fieldMatches(input, ["present"])) {
           const isCurrent = profile.is_current !== false; // default to true if unknown
@@ -1009,6 +1146,43 @@
         if (tryCustomDropdown(["field of study", "major", "program"], [defaultAnswers.major], true)) return;
       }
 
+      // Source / Hear About (Text Input equivalent)
+      if (fieldMatches(input, ["how did you hear", "source"])) {
+        if (profile.question_hear_about) {
+          setValue(input, profile.question_hear_about);
+          return;
+        }
+      }
+
+      // Preferred Office Location
+      if (
+        fieldMatches(input, ["office location", "preferred location", "preferred office"]) &&
+        profile.question_office_location
+      ) {
+        setValue(input, profile.question_office_location);
+        return;
+      }
+
+      // Conflict of Interest Details
+      if (
+        (input.tagName === "TEXTAREA" || input.type === "text") &&
+        fieldMatches(input, ["conflict", "relationship", "outside business", "investment"]) &&
+        profile.question_conflict_details
+      ) {
+        setValue(input, profile.question_conflict_details);
+        return;
+      }
+
+      // Government Official Details
+      if (
+        (input.tagName === "TEXTAREA" || input.type === "text") &&
+        fieldMatches(input, ["government", "official", "corruption"]) &&
+        profile.question_gov_details
+      ) {
+        setValue(input, profile.question_gov_details);
+        return;
+      }
+
       // Password
       if (
         (input.type === "password" ||
@@ -1020,7 +1194,7 @@
         setValue(input, defaultAnswers.password);
         return;
       }
-    });
+    }
   }
 
   // Message Listener

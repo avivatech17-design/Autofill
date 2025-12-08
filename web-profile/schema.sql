@@ -35,6 +35,53 @@ begin
   if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'primary_role') then
     alter table public.profiles add column primary_role text;
   end if;
+  -- New Job Preference Columns
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_hear_about') then
+    alter table public.profiles add column question_hear_about text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_used_product') then
+    alter table public.profiles add column question_used_product text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_worked_before') then
+    alter table public.profiles add column question_worked_before text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_pronouns') then
+    alter table public.profiles add column question_pronouns text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_work_auth') then
+    alter table public.profiles add column question_work_auth text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_sponsorship') then
+    alter table public.profiles add column question_sponsorship text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_office_willingness') then
+    alter table public.profiles add column question_office_willingness text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_office_location') then
+    alter table public.profiles add column question_office_location text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_conflict_interest') then
+    alter table public.profiles add column question_conflict_interest text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_conflict_details') then
+    alter table public.profiles add column question_conflict_details text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_gov_official') then
+    alter table public.profiles add column question_gov_official text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_gov_details') then
+    alter table public.profiles add column question_gov_details text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_gender') then
+    alter table public.profiles add column question_gender text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_lgbtq') then
+    alter table public.profiles add column question_lgbtq text;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'profiles' and column_name = 'question_military_status') then
+    alter table public.profiles add column question_military_status text;
+  end if;
+  -- End New Columns
 end $$;
 
 -- Create experiences table
