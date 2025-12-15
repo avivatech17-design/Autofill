@@ -10,9 +10,19 @@
     const placeholder = (input.placeholder || "").toLowerCase();
     const ariaLabel = (input.getAttribute("aria-label") || "").toLowerCase();
     const dataLabel = (input.getAttribute("data-label") || "").toLowerCase();
+    const dataTestId = (input.getAttribute("data-testid") || "").toLowerCase();
+
+    // Resolve aria-labelledby
+    const ariaLabelledBy = input.getAttribute("aria-labelledby");
+    let ariaLabelledText = "";
+    if (ariaLabelledBy) {
+      ariaLabelledText = ariaLabelledBy.split(/\s+/).map(id => document.getElementById(id)?.innerText || "").join(" ");
+    }
+
     const labelText = (
       input.closest("label")?.innerText ||
       input.parentElement?.querySelector("label")?.innerText ||
+      ariaLabelledText ||
       Array.from(input.labels || [])
         .map((l) => l.innerText)
         .join(" ") ||
@@ -33,6 +43,7 @@
         placeholder.includes(kw) ||
         ariaLabel.includes(kw) ||
         dataLabel.includes(kw) ||
+        dataTestId.includes(kw) ||
         labelText.includes(kw)
       );
     });
@@ -91,6 +102,7 @@
   }
 
   function setCheckbox(input, checked) {
+
     if (input.type !== "checkbox") return false;
     input.checked = checked;
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -444,13 +456,7 @@
   }
 
   async function fillForm(profile) {
-    console.log("ANTIGRAVITY: Filling Form with Profile:", Object.keys(profile));
-    console.log("ANTIGRAVITY: Profile Values:", {
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      email: profile.email,
-      phone: profile.phone
-    });
+    // console.log("ANTIGRAVITY: Filling Form with Profile:", Object.keys(profile));
 
     // Polyfill First/Last name if missing
     if (profile.fullName && !profile.firstName) {
@@ -696,7 +702,6 @@
         "bachelorofengineering",
         "bacheloroftechnology",
       ];
-
       const matchesList = (list) =>
         list.some((item) => lower === item || lower.includes(item));
 
@@ -707,7 +712,8 @@
 
     // Convert to sequential loop to prevent UI race conditions
     for (const input of inputs) {
-      if (!visible(input)) continue;
+      // Allow file inputs even if hidden (often styled with custom buttons)
+      if (!visible(input) && input.type !== 'file') continue;
 
       // Previous Employment / Current Employee Questions -> Default NO
       if (input.type === 'radio' || input.tagName === 'SELECT') {
@@ -718,7 +724,7 @@
           ""
         ).toLowerCase();
 
-        const keywords = ["previously worked", "worked for", "current employee", "currently work for", "employment history at"];
+        const keywords = ["previously worked", "worked for", "current employee", "currently work for", "employment history at", "have you ever worked", "previous associate", "current associate"];
         if (keywords.some(kw => question.includes(kw))) {
           // It's a relevant question. Try to select "No".
           if (input.tagName === 'SELECT') {
@@ -741,6 +747,28 @@
               input.click();
               continue;
             }
+          }
+        }
+      }
+
+      // Preferred Language -> Default English
+      if ((input.type === 'radio' || input.tagName === 'SELECT') && fieldMatches(input, ["preferred language", "language of communication", "language"])) {
+        if (input.tagName === 'SELECT') {
+          // Select English
+          for (const opt of input.options) {
+            const txt = (opt.text || "").toLowerCase();
+            if (txt.includes("english")) {
+              input.value = opt.value;
+              input.dispatchEvent(new Event("change", { bubbles: true }));
+              break;
+            }
+          }
+        } else if (input.type === 'radio') {
+          const label = (input.nextElementSibling?.innerText || input.parentElement?.innerText || "").toLowerCase();
+          const val = (input.value || "").toLowerCase();
+          if (label.includes("english") || val === "english" || val === "en") {
+            input.click();
+            continue;
           }
         }
       }
@@ -908,10 +936,10 @@
             "application source",
           ])
         ) {
-          if (trySelect(defaultAnswers.source)) return;
+          if (trySelect(defaultAnswers.source)) continue;
         }
 
-        return;
+        continue;
       }
 
       // Skills Input - Loop through skills
@@ -919,26 +947,65 @@
         if (safeProfile.skills && Array.isArray(safeProfile.skills) && safeProfile.skills.length > 0) {
           // Only try to fill if empty or looks like a search box
           if (!input.value) {
-            // We can't easily loop here because it requires interaction (type, enter, type, enter).
-            // Best we can do is try to fill one by one or comma separated depending on the field.
-            // Heuristic: if it looks like a tag input (often has no value but has a container), we might need a more complex approach.
-            // For now, let's try to fill the first few skills comma-separated, or just the top skills.
-            // User request: "read from our skills and manually enter one by one"
-            // This usually requires a separate async process.
-            // Let's attach a special handler for skills.
-            fillSkillsOneByOne(input, safeProfile.skills);
-            return;
+            // Fill skills one by one
+            await fillSkillsOneByOne(input, safeProfile.skills);
+            continue;
           }
         }
       }
 
       if (input.type === "checkbox") {
         // Agree / Consent / Privacy / SMS
-        const label = (input.nextElementSibling?.innerText || input.parentElement?.innerText || "").toLowerCase();
+        const label = (input.closest("label")?.innerText || input.nextElementSibling?.innerText || input.parentElement?.innerText || "").toLowerCase();
         const agreeKeywords = ["agree", "consent", "acknowledge", "privacy", "policy", "communications", "sms", "text message", "updates", "certify", "declare", "confirm"];
         if (agreeKeywords.some(kw => label.includes(kw))) {
           setCheckbox(input, true);
-          return;
+          continue;
+        }
+
+        // Demographic Questions (Gender, Race, Veteran, etc.)
+        const groupLabel = (
+          input.closest(".form-group")?.querySelector("label.control-label")?.innerText ||
+          input.closest("fieldset")?.querySelector("legend")?.innerText ||
+          input.closest(".field")?.querySelector("label")?.innerText ||
+          ""
+        ).toLowerCase();
+
+        let isDemographicMatch = false;
+        const pGender = (profile.gender || "").toLowerCase();
+        const pRace = (profile.race || "").toLowerCase();
+        const pVeteran = (profile.veteran || "").toLowerCase();
+        const pDisability = (profile.disability || "").toLowerCase();
+
+        if (groupLabel.includes("gender")) {
+          if (label === pGender) isDemographicMatch = true;
+          if ((label === "man" || label === "male") && pGender.startsWith("m")) isDemographicMatch = true;
+          if ((label === "woman" || label === "female") && pGender.startsWith("f")) isDemographicMatch = true;
+          if (label.includes("non-binary") && pGender.includes("non-binary")) isDemographicMatch = true;
+        } else if (groupLabel.includes("race") || groupLabel.includes("ethnicity") || groupLabel.includes("racial") || groupLabel.includes("origin")) {
+          if (label === pRace) isDemographicMatch = true;
+          if (pRace.includes("asian") && label.includes("asian")) isDemographicMatch = true;
+          if (pRace.includes("black") && (label.includes("black") || label.includes("african"))) isDemographicMatch = true;
+          if (pRace.includes("hispanic") && (label.includes("hispanic") || label.includes("latin") || label.includes("spanish"))) isDemographicMatch = true;
+          if (pRace.includes("white") && (label.includes("white") || label.includes("caucasian") || label.includes("european"))) isDemographicMatch = true;
+        } else if (groupLabel.includes("sexual orientation")) {
+          const pSexOrient = (profile.lgbtq || "").toLowerCase();
+          if (pSexOrient === "yes" && !label.includes("straight") && !label.includes("heterosexual")) {
+            const pOrient = (profile.sexual_orientation || "").toLowerCase();
+            if (pOrient && label.includes(pOrient)) isDemographicMatch = true;
+          }
+        } else if (groupLabel.includes("veteran") || groupLabel.includes("military")) {
+          if (label === pVeteran) isDemographicMatch = true;
+          if (pVeteran === "yes" && label.includes("identify as one")) isDemographicMatch = true;
+          if ((pVeteran === "no" || pVeteran === "not a veteran" || pVeteran === "notaveteran") && (label.includes("not") || label.includes("no "))) isDemographicMatch = true;
+        } else if (groupLabel.includes("disability")) {
+          if (label === pDisability) isDemographicMatch = true;
+          if (pDisability === "yes" && label.includes("yes")) isDemographicMatch = true;
+        }
+
+        if (isDemographicMatch) {
+          setCheckbox(input, true);
+          continue;
         }
 
         // Currently working here
@@ -958,7 +1025,7 @@
               el.dispatchEvent(new Event("change", { bubbles: true }));
             });
           }
-          return;
+          continue;
         }
       }
 
@@ -1000,7 +1067,7 @@
 
       // First name
       if (
-        fieldMatches(input, ["first name", "given name", "fname", "first"]) &&
+        fieldMatches(input, ["first name", "given name", "fname", "first", "given-name"]) &&
         profile.firstName
       ) {
         setValue(input, profile.firstName);
@@ -1009,7 +1076,7 @@
 
       // Last name
       if (
-        fieldMatches(input, ["last name", "surname", "family name", "lname"]) &&
+        fieldMatches(input, ["last name", "surname", "family name", "lname", "family-name"]) &&
         profile.lastName
       ) {
         setValue(input, profile.lastName);
@@ -1027,7 +1094,7 @@
       }
 
       // Phone
-      if (fieldMatches(input, ["phone", "mobile", "contact"]) && profile.phone) {
+      if (fieldMatches(input, ["phone", "mobile", "contact", "tel", "tel-national"]) && profile.phone) {
         setValue(input, profile.phone);
         continue;
       }

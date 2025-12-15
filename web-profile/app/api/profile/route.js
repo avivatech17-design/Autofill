@@ -83,6 +83,7 @@ export async function GET(request) {
   ]);
 
   console.log('DEBUG: API GET experiences:', JSON.stringify(expRes.data), expRes.error);
+  console.log('DEBUG: API GET skills count:', skillRes.data?.length, 'First skill:', skillRes.data?.[0]);
 
   let resumeUrl = null;
   if (profile?.resume_path) {

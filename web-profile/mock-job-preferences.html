@@ -98,36 +98,45 @@
             </select>
         </div>
 
-        <!-- EEO -->
+        <!-- EEO (Checkboxes) -->
         <h3>Equal Employment Opportunity</h3>
 
-        <div class="form-group">
-            <label>What is your gender identity?*</label>
-            <select class="form-select" id="gender">
-                <option value="">Select...</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Decline">Decline</option>
-            </select>
+        <div class="form-group field field-array">
+            <label class="control-label">How would you describe your gender identity? (mark all that apply)</label>
+            <div class="checkboxes">
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Man"
+                                id="gender_man"><span>Man</span></span></label></div>
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Woman"
+                                id="gender_woman"><span>Woman</span></span></label></div>
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Non-binary"
+                                id="gender_nb"><span>Non-binary</span></span></label></div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>What is your race or ethnicity?*</label>
-            <select class="form-select" id="race">
-                <option value="">Select...</option>
-                <option value="Asian">Asian</option>
-                <option value="White">White</option>
-                <option value="Decline">Decline</option>
-            </select>
+        <div class="form-group field field-array">
+            <label class="control-label">How would you describe your racial/ethnic background? (mark all that
+                apply)</label>
+            <div class="checkboxes">
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Asian"
+                                id="race_asian"><span>Asian</span></span></label></div>
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Black or of African descent"
+                                id="race_black"><span>Black or of African descent</span></span></label></div>
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="White or European"
+                                id="race_white"><span>White or European</span></span></label></div>
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Hispanic"
+                                id="race_hispanic"><span>Hispanic, Latinx or of Spanish Origin</span></span></label>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>What is your military status?*</label>
-            <select class="form-select" id="veteran">
-                <option value="">Select...</option>
-                <option value="Veteran">Veteran</option>
-                <option value="Not a Veteran">Not a Veteran</option>
-            </select>
+        <div class="form-group field field-array">
+            <label class="control-label">What is your military status?</label>
+            <div class="checkboxes">
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Veteran" id="vet_yes"><span>I
+                                identify as one (Veteran)</span></span></label></div>
+                <div class="checkbox"><label><span><input type="checkbox" aria-label="Not a Veteran" id="vet_no"><span>I
+                                am not a veteran</span></span></label></div>
+            </div>
         </div>
 
         <div class="form-group">

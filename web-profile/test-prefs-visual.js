@@ -17,6 +17,9 @@ const fs = require('fs');
     console.log(`Navigating to mock form: ${filePath}`);
     await page.goto(filePath);
 
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', err => console.log('PAGE ERROR:', err.toString()));
+
     // 2. Prepare Environment (Mock Chrome API)
     await page.evaluate(() => {
         window.chrome = {
@@ -63,11 +66,11 @@ const fs = require('fs');
                     question_conflict_interest: "Yes",
                     question_conflict_details: "My brother works there",
                     question_gov_official: "No",
-                    question_gender: "Male",
+                    gender: "Male",
                     race: "Asian",
-                    veteran_status: "Not a Veteran",
-                    disability_status: "No",
-                    question_lgbtq: "No"
+                    veteran: "Not a Veteran",
+                    disability: "No",
+                    lgbtq: "No"
                 }
             }, {}, (resp) => console.log('Response:', resp));
         } else {

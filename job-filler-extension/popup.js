@@ -19,6 +19,7 @@ const dispName = document.getElementById("dispName");
 const dispEmail = document.getElementById("dispEmail");
 const dispPhone = document.getElementById("dispPhone");
 const dispLoc = document.getElementById("dispLoc");
+const dispResume = document.getElementById("dispResume");
 const linkLi = document.getElementById("linkLi");
 const linkGh = document.getElementById("linkGh");
 const linkPort = document.getElementById("linkPort");
@@ -54,9 +55,9 @@ function updateResumeStatus() {
 }
 
 const DEFAULT_SUPA = {
-  url: "https://hlnziqyaovhefahcdxps.supabase.co",
+  url: "https://xgoixfqiwhihkrqossfl.supabase.co",
   anonKey:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhsbnppcXlhb3ZoZWZhaGNkeHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzNDYwNzcsImV4cCI6MjA3OTkyMjA3N30.8fpmV4sQ4RI8WmwR29-jaEFwjt_N1BuHTS9o3OcJUDI",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhnb2l4ZnFpd2hpaGtycW9zc2ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ3OTMxOTIsImV4cCI6MjA4MDM2OTE5Mn0.hySBZYm4odEg60Ol1PptV3hNOgZMEbbpJc41dfRQohw",
   bucket: "resumes",
   webUrl: "http://localhost:3000/",
 };
@@ -510,6 +511,11 @@ function renderProfileUI() {
       .filter(Boolean)
       .join(", ");
     dispLoc.textContent = loc || "—";
+  }
+
+  // Resume
+  if (dispResume) {
+    dispResume.textContent = currentResume?.name || (currentProfile.resume_path ? currentProfile.resume_path.split('/').pop() : "—");
   }
 
   // Links

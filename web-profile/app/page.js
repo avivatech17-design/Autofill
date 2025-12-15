@@ -143,6 +143,7 @@ export default function Page() {
   useEffect(() => {
     const t = searchParams.get('tab');
     if (t === 'work') setActiveTab('work');
+    else if (t === 'preferences') setActiveTab('preferences');
     else setActiveTab('profile');
   }, [searchParams]);
 
@@ -213,6 +214,17 @@ export default function Page() {
         .eq('id', activeSession.user.id)
         .single();
 
+      // Fetch skills directly (API is unreliable)
+      const { data: skillData } = await supabase
+        .from(tables.skills)
+        .select('*')
+        .eq('user_id', activeSession.user.id);
+
+      const { data: langData } = await supabase
+        .from(tables.languages)
+        .select('*')
+        .eq('user_id', activeSession.user.id);
+
       isApplyingLoad.current = true;
       setProfile({ ...emptyProfile, ...profileData });
 
@@ -222,8 +234,10 @@ export default function Page() {
 
       setExperiences(loadedExperiences);
       setEducations(eduData?.length ? eduData : [{ ...emptyEducation }]);
-      setUserSkills(json.skills || []);
-      setUserLanguages(json.languages || []);
+
+      console.log('DEBUG: loadAll direct skills:', skillData?.length);
+      setUserSkills(skillData || []);
+      setUserLanguages(langData || []);
       isApplyingLoad.current = false;
 
       isLoaded.current = true;
@@ -306,13 +320,22 @@ export default function Page() {
       setAuthStatus('Saved personal info');
 
       // Also save skills if they were modified (e.g. via auto-add)
+      // Always sync skills (delete existing, then insert new)
       const currentSkills = userSkillsRef.current;
-      if (currentSkills.length > 0) {
-        const skillsClean = currentSkills.map(s => ({ user_id: uid, skill_name: s.skill_name || s }));
-        await supabase.from(tables.skills).delete().eq('user_id', uid);
-        await supabase.from(tables.skills).insert(skillsClean);
-        setAuthStatus('Saved personal info & skills');
+      console.log('DEBUG: savePersonal currentSkills:', currentSkills);
+
+      const skillsClean = currentSkills.map(s => ({ user_id: uid, skill_name: s.skill_name || s }));
+      console.log('DEBUG: savePersonal skillsClean payload:', JSON.stringify(skillsClean));
+
+      const { error: delError } = await supabase.from(tables.skills).delete().eq('user_id', uid);
+      if (delError) console.error('DEBUG: Delete skills error:', delError);
+
+      if (skillsClean.length > 0) {
+        const { data: insData, error: insError } = await supabase.from(tables.skills).insert(skillsClean).select();
+        if (insError) console.error('DEBUG: Insert skills error:', insError);
+        console.log('DEBUG: Inserted skills data:', insData);
       }
+      setAuthStatus('Saved personal info & skills');
     } catch (e) {
       setAuthStatus(`Save error: ${e.message}`);
     } finally {
